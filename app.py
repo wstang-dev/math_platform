@@ -57,20 +57,32 @@ with tab1:
         if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
             transcript_text = None
             
-            # --- 第一階段：語音轉寫 ---
+           # --- 第一階段：語音轉寫（加入重試與備用模型機制）---
             with st.spinner("1/2 使用 Cloudflare Whisper 進行語音轉寫..."):
                 file_bytes = audio_file.getvalue()
                 whisper_headers = {
                     "Authorization": f"Bearer {cf_api_token}",
                     "Content-Type": "application/octet-stream"
                 }
-                res = run_cf_ai("@cf/openai/whisper", whisper_headers, payload=file_bytes, is_binary=True)
                 
-                if res.get("success"):
+                # 優先嘗試主模型，失敗則自動切換至備用模型 whisper-large-v3-turbo
+                models_to_try = ["@cf/openai/whisper", "@cf/openai/whisper-large-v3-turbo"]
+                res = None
+                
+                for model in models_to_try:
+                    # 每個模型嘗試最多 2 次
+                    for attempt in range(2):
+                        res = run_cf_ai(model, whisper_headers, payload=file_bytes, is_binary=True)
+                        if res.get("success"):
+                            break
+                    if res and res.get("success"):
+                        break
+                
+                if res and res.get("success"):
                     transcript_text = res.get("result", {}).get("text", "")
                     st.success("✅ 語音轉寫完成！")
                 else:
-                    err_msg = res.get("errors", [{}])[0].get("message", "未知錯誤")
+                    err_msg = res.get("errors", [{}])[0].get("message", "Cloudflare 伺服器繁忙，請稍後再試")
                     st.error(f"語音轉寫失敗：{err_msg}")
 
             # --- 展示逐字稿 ---
