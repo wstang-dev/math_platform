@@ -21,48 +21,50 @@ st.caption("專為數學科組設計：語音轉備課紀錄 | 校本題庫共�
 
 tab1, tab2, tab3 = st.tabs(["🎙️ 語音生成備課紀錄", "📝 數學教案與題庫共享", "🤖 AI 數學擬題助手"])
 
-import io  # 請確認 app.py 最頂部有 import io，若沒有請在最上方加入 import io
+import io
 
 # ==========================================
 # Tab 1: 語音生成備課紀錄
 # ==========================================
 with tab1:
-    st.header("🎙️ 備課會議錄音轉寫與結構化紀錄")
-    st.write("上傳備課會議錄音/影片檔（MP3, M4A, WAV, MP4 等），Groq 將自動進行超高速語音轉寫與紀錄整理。")
+    st.header("語音生成備課紀錄")
+    st.write("上傳備課會議錄音/影片檔（MP3, M4A, WAV, MP4 等），Groq 將進行語音轉寫與紀錄整理。")
 
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
     if audio_file and client:
-        if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
+        if st.button("開始分析錄音並生成紀錄", type="primary"):
+            transcript_text = None
+            
+            # --- 第一階段：語音轉寫 ---
             with st.spinner("1/2 使用 Whisper 進行極速語音轉寫..."):
                 try:
-                    # 將上傳的檔案讀取為純 Byte 流，並手動賦予純英文 filename 屬性
-                    audio_bytes = io.BytesIO(audio_file.getvalue())
-                    audio_bytes.name = "input_audio.mp3"
-
-                    # 呼叫 Groq Whisper API
+                    # 抓取檔案位元組資料
+                    file_bytes = audio_file.getvalue()
+                    
+                    # 傳遞給 Groq API
                     transcription = client.audio.transcriptions.create(
-                        file=audio_bytes,
+                        file=("temp_audio.mp3", file_bytes, "audio/mp3"),
                         model="whisper-large-v3",
                         response_format="text"
                     )
-                    transcript_text = transcription
-                    st.success("✅ 語音轉寫完成！")
+                    transcript_text = str(transcription)
+                    st.success("語音轉寫完成！")
                 except Exception as e:
-                    st.error(f"語音轉寫失敗：{e}")
-                    transcript_text = None
+                    # 使用 repr(e) 防止例外訊息本身包含非 ASCII 字元導致爆錯
+                    st.error(f"語音轉寫失敗，錯誤訊息：{repr(e)}")
 
+            # --- 第二階段：AI 生成結構化紀錄 ---
             if transcript_text:
                 with st.spinner("2/2 整理數學科結構化備課紀錄..."):
-                    prompt = f"""
-你是一位資深的中學數學科科主席。請根據以下備課會議的逐字稿，整理出一份結構化的「數學科集體備課紀錄」。
+                    prompt = f"""你是一位資深的中學數學科科主席。請根據以下備課會議的逐字稿，整理出一份結構化的「數學科集體備課紀錄」。
 
 【輸出格式要求】：
-1. **會議基本資訊**：日期、主題、參與年級與章節（例如：中四 - 一元二次方程）。
-2. **教學重點與難點**：列出本單元學生最容易混淆的觀念（Misconceptions）。
-3. **教學策略與課堂活動**：同工討論出的教學法、視覺化工具（如 GeoGebra）應用建議。
-4. **擬題與評估建議**：提供 2-3 題符合本單元重點的範例題目，所有數學公式必須使用標準 LaTeX 格式（例如：$x^2 + bx + c = 0$ 或 block 格式 $$x = \\frac{{-b \\pm \\sqrt{{b^2-4ac}}}}{{2a}}$$）。
-5. **待辦事項（Action Items）**：分工與負責老師。
+1. 會議基本資訊：日期、主題、參與年級與章節（例如：中四 - 一元二次方程）。
+2. 教學重點與難點：列出本單元學生最容易混淆的觀念（Misconceptions）。
+3. 教學策略與課堂活動：同工討論出的教學法、視覺化工具（如 GeoGebra）應用建議。
+4. 擬題與評估建議：提供 2-3 題符合本單元重點的範例題目，所有數學公式必須使用標準 LaTeX 格式（例如：$x^2 + bx + c = 0$）。
+5. 待辦事項（Action Items）：分工與負責老師。
 
 以下是會議逐字稿：
 {transcript_text}
@@ -76,13 +78,13 @@ with tab1:
                         result_md = response.choices[0].message.content
                         st.markdown(result_md)
                         st.download_button(
-                            label="📥 下載備課紀錄 (Markdown)",
+                            label="下載備課紀錄 (Markdown)",
                             data=result_md,
-                            file_name="數學科備課紀錄.md",
+                            file_name="meeting_notes.md",
                             mime="text/markdown"
                         )
                     except Exception as e:
-                        st.error(f"AI 生成紀錄失敗：{e}")
+                        st.error(f"AI 生成紀錄失敗：{repr(e)}")
 # ==========================================
 # Tab 2: 數學教案與題庫共享
 # ==========================================
