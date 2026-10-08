@@ -43,7 +43,12 @@ with tab1:
             with st.spinner("1/2 使用 Cloudflare Whisper 進行語音轉寫..."):
                 file_bytes = audio_file.getvalue()
                 # 呼叫 Cloudflare Whisper 模型
-                res = run_cf_ai("@cf/openai/whisper", headers, payload=file_bytes, is_binary=True)
+                # 修正後的寫法：加入 Content-Type 標頭
+                whisper_headers = {
+                    "Authorization": f"Bearer {cf_api_token}",
+                    "Content-Type": "application/octet-stream"
+                }
+                res = run_cf_ai("@cf/openai/whisper", whisper_headers, payload=file_bytes, is_binary=True)
                 
                 if res.get("success"):
                     transcript_text = res.get("result", {}).get("text", "")
