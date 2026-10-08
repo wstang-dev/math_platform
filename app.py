@@ -64,7 +64,6 @@ with tab1:
 
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
-    # 只要上傳了檔案就顯示按鈕，若缺金鑰則提示
     if audio_file:
         if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
             if not cf_account_id or not cf_api_token:
@@ -79,7 +78,8 @@ with tab1:
                     res = None
                     for m in models:
                         res = run_cf_ai(m, whisper_headers, payload=file_bytes, is_binary=True)
-                        if res and res.get("success"): break
+                        if res and res.get("success"):
+                            break
                     
                     if res and res.get("success"):
                         st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
@@ -105,99 +105,13 @@ with tab1:
                             "| 1. [重點1] | 1. [程序1]<br>&nbsp;&nbsp;a. [子點a] | [資料來源] | 1. [檢討1] | [備註] |\n\n"
                             "逐字稿內容：\n" + clean_transcript
                         )
-                        llm_res = run_cf_ai("@cf/meta/llama-3.1-8b-instruct", {"Authorization": f"Bearer {cf_api_token}"}, 
-                                            payload={"messages": [{"role": "user", "content": prompt}]})
+                        llm_res = run_cf_ai(
+                            "@cf/meta/llama-3.1-8b-instruct", 
+                            {"Authorization": f"Bearer {cf_api_token}"}, 
+                            payload={"messages": [{"role": "user", "content": prompt}]}
+                        )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.success("✅ 校本紀錄生成成功！")
                         else:
-                            st.error("❌ AI 生成紀錄失敗，請稍後重試。")
-
-    # 顯示逐字稿
-    if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-        with st.expander("📄 點擊展開 / 隱藏「會議完整逐字稿」", expanded=False):
-            st.text_area("逐字稿內容", value=st.session_state["transcript_text"], height=200)
-
-    # 顯示紀錄編輯與儲存區
-    if "current_note" in st.session_state and st.session_state["current_note"]:
-        st.divider()
-        st.subheader("📋 集體備課紀錄預覽與手動修訂")
-        edited_note = st.text_area("編輯內容（修正錯字）", value=st.session_state["current_note"], height=300)
-        st.session_state["current_note"] = edited_note
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.download_button("📥 下載備課紀錄 (.md)", data=st.session_state["current_note"], file_name="備課紀錄.md", mime="text/markdown")
-        with col2:
-            if st.button("💾 儲存至歷年紀錄庫", type="primary"):
-                history = load_data(HISTORY_FILE)
-                history.append({
-                    "id": len(history) + 1,
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "title": f"數學備課紀錄 ({datetime.now().strftime('%Y-%m-%d')})",
-                    "content": st.session_state["current_note"]
-                })
-                save_data(HISTORY_FILE, history)
-                st.success("✅ 已成功儲存！可在「📚 歷年備課紀錄庫」查閱。")
-
-# ==========================================
-# Tab 2: 歷年備課紀錄庫
-# ==========================================
-with tab2:
-    st.header("📚 歷年備課紀錄庫")
-    history = load_data(HISTORY_FILE)
-    if not history:
-        st.info("目前尚無儲存的備課紀錄。可以在 Tab 1 生成或修訂後點擊「💾 儲存至歷年紀錄庫」。")
-    else:
-        titles = [f"{item['date']} - {item['title']}" for item in reversed(history)]
-        selected = st.selectbox("選擇要查閱的備課紀錄", titles)
-        idx = titles.index(selected)
-        item = list(reversed(history))[idx]
-        
-        st.markdown(item["content"])
-        st.download_button("📥 下載此紀錄 (.md)", data=item["content"], file_name=f"{item['title']}.md", mime="text/markdown")
-
-# ==========================================
-# Tab 3: 課堂互動教材庫 (HTML5 / AI 遊戲)
-# ==========================================
-with tab3:
-    st.header("🎮 課堂互動教材與 AI 程式庫")
-    st.write("上載同工製作或 AI 生成的 HTML5 互動教具/遊戲，老師可在課堂上即時開啟給學生遊玩。")
-    
-    with st.expander("➕ 上載新互動教材 (.html 檔)", expanded=False):
-        game_title = st.text_input("教材/遊戲名稱", placeholder="例如：小三分數大小比較遊戲")
-        game_grade = st.selectbox("適用年級", ["小一", "小二", "小三", "小四", "小五", "小六", "全校通用"])
-        html_file = st.file_uploader("上傳單頁 HTML 檔", type=["html", "htm"])
-        
-        if st.button("🚀 發布教材至教材庫", type="primary"):
-            if game_title and html_file:
-                html_code = html_file.getvalue().decode("utf-8")
-                games = load_data(GAMES_FILE)
-                games.append({
-                    "id": len(games) + 1,
-                    "title": game_title,
-                    "grade": game_grade,
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "code": html_code
-                })
-                save_data(GAMES_FILE, games)
-                st.success(f"✅ 教材「{game_title}」發布成功！")
-                st.rerun()
-            else:
-                st.warning("請填寫名稱並上傳 HTML 檔案。")
-                
-    st.divider()
-    
-    games = load_data(GAMES_FILE)
-    if not games:
-        st.info("💡 目前教材庫尚未有互動教具，點擊上方「上載新互動教材」來建立第一個課堂遊戲吧！")
-    else:
-        st.subheader("🎯 選擇課堂教材並開始互動")
-        game_options = [f"[{g['grade']}] {g['title']} ({g['date']})" for g in reversed(games)]
-        selected_game_str = st.selectbox("選擇要播放的教材", game_options)
-        
-        selected_idx = game_options.index(selected_game_str)
-        current_game = list(reversed(games))[selected_idx]
-        
-        st.markdown(f"### 🎮 當前播放：{current_game['title']}")
-        components.html(current_game["code"], height=6
+                            st
