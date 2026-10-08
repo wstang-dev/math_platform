@@ -11,7 +11,7 @@ cf_account_id = os.getenv("CLOUDFLARE_ACCOUNT_ID") or st.sidebar.text_input("Clo
 cf_api_token = os.getenv("CLOUDFLARE_API_TOKEN") or st.sidebar.text_input("Cloudflare API Token", type="password")
 
 st.title("📐 小學數學科集體備課與 AI 輔助平台")
-st.caption("專為香港小學數學科組設計：小學校本備課紀錄格式 | 歷史紀錄庫 | AI 命題助手")
+st.caption("專為香港小學數學科組設計：小學校本備課紀錄格式 | 線上即時修訂 | 歷史紀錄庫")
 
 HISTORY_FILE = "meeting_notes_history.json"
 
@@ -45,11 +45,11 @@ def run_cf_ai(model_name, headers, payload=None, is_binary=False):
 tab1, tab2, tab3 = st.tabs(["🎙️ 語音生成校本備課紀錄", "📚 歷年備課紀錄庫", "🤖 AI 小學數學擬題助手"])
 
 # ==========================================
-# Tab 1: 語音生成校本備課紀錄（小學專屬格式）
+# Tab 1: 語音生成校本備課紀錄（支援即時編輯）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與紀錄生成")
-    st.write("上傳備課會議錄音檔，系統將自動套用小學數學科校本 Word 表格格式生成紀錄。")
+    st.write("上傳備課會議錄音檔，系統將自動套用小學數學科校本表格格式生成紀錄，並支援即時修改文字。")
 
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
@@ -102,57 +102,4 @@ with tab1:
 
 | 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 | 檢討及建議 | 備註 |
 | :--- | :--- | :--- | :--- | :--- |
-| 1. [重點1]<br><br>2. [重點2] | 1. [程序1]<br>&nbsp;&nbsp;a. [子點a]<br>&nbsp;&nbsp;b. [子點b]<br>2. [程序2] | [如教科書/工作紙/GeoGebra] | 1. [建議1]<br>2. [建議2] | [備註事項] |
-
-【注意事項】：
-1. 內容必須符合香港小學數學課程（小一至小六）。
-2. 表格內容需詳細、結構清晰，多使用條列式（1., 2. 及 a., b.）。
-3. 所有數學算式與符號請使用標準 LaTeX 格式（例如 $12 \\times 5 = 60$）。
-4. 請使用繁體中文。
-
-以下是會議逐字稿：
-{transcript_text[:4000]}"""
-
-                    llm_headers = {"Authorization": f"Bearer {cf_api_token}"}
-                    payload = {
-                        "messages": [
-                            {"role": "system", "content": "你是一位專業的香港小學數學教學助理，熟悉香港小學數學課程。"},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "max_tokens": 2048
-                    }
-                    
-                    llm_res = run_cf_ai("@cf/meta/llama-3.1-8b-instruct", llm_headers, payload=payload)
-                    
-                    if llm_res.get("success"):
-                        result_md = llm_res.get("result", {}).get("response", "")
-                        st.session_state["current_note"] = result_md
-                    else:
-                        err_msg = llm_res.get("errors", [{}])[0].get("message", repr(llm_res))
-                        st.error(f"AI 生成紀錄失敗：{err_msg}")
-
-    # 顯示生成結果與儲存按鈕
-    if "current_note" in st.session_state:
-        st.subheader("📋 生成之校本集體備課紀錄")
-        st.markdown(st.session_state["current_note"])
-        
-        col_dl, col_sv = st.columns(2)
-        with col_dl:
-            st.download_button(
-                label="📥 下載備課紀錄 (.md)",
-                data=st.session_state["current_note"],
-                file_name=f"備課紀錄_{datetime.now().strftime('%Y%m%d')}.md",
-                mime="text/markdown"
-            )
-        with col_sv:
-            if st.button("💾 儲存至校本備課紀錄庫", type="primary"):
-                history = load_history()
-                new_record = {
-                    "id": len(history) + 1,
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "title": f"小學數學備課紀錄 ({datetime.now().strftime('%Y-%m-%d')})",
-                    "content": st.session_state["current_note"]
-                }
-                history.append(new_record)
-                save_history(history)
-                st.success("✅ 已成功儲存至平台資料庫！同事可在「歷年備課紀錄庫」查閱。")
+| 1. [重點1]<br><br>2. [重點2] | 1. [程序1]<br>&nbsp;&nbsp;a. [子點a]<br>&nbsp;&nbsp;b. [子點b]<br>2. [程序2] | [如教科書/工作紙/GeoGebra] |
