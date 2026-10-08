@@ -82,7 +82,8 @@ with tab1:
                     }
                     
                     # 呼叫 Cloudflare Llama-3-8b 模型
-                    llm_res = run_cf_ai("@cf/meta/llama-3-8b-instruct", llm_headers, payload=payload)
+                    # 新的（正常運作）：
+                    llm_res = run_cf_ai(@cf/meta/llama-3.3-70b-instruct-fp8-fast, llm_headers, payload=payload)
                     
                     if llm_res.get("success"):
                         result_md = llm_res.get("result", {}).get("response", "")
@@ -151,7 +152,7 @@ with tab3:
                     {"role": "user", "content": prompt}
                 ]
             }
-            llm_res = run_cf_ai("@cf/meta/llama-3-8b-instruct", headers, payload=payload)
+            llm_res = run_cf_ai(@cf/meta/llama-3.3-70b-instruct-fp8-fast, llm_headers, payload=payload)
             if llm_res.get("success"):
                 st.markdown(llm_res.get("result", {}).get("response", ""))
             else:
