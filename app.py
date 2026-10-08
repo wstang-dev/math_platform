@@ -59,6 +59,7 @@ with tab1:
 
             if transcript_text:
                 with st.spinner("2/2 整理數學科結構化備課紀錄..."):
+                    # 避免逐字稿過長，截取適當長度或直接傳送
                     prompt = f"""你是一位資深的中學數學科科主席。請根據以下備課會議的逐字稿，整理出一份結構化的「數學科集體備課紀錄」。
 
 【輸出格式要求】：
@@ -69,16 +70,19 @@ with tab1:
 5. **待辦事項（Action Items）**：分工與負責老師。
 
 以下是會議逐字稿：
-{transcript_text}"""
+{transcript_text[:4000]}"""  # 限制最大字數避免超長
                     
+                    llm_headers = {"Authorization": f"Bearer {cf_api_token}"}
                     payload = {
                         "messages": [
-                            {"role": "system", "content": "你是一位專業的數學教學助理。"},
+                            {"role": "system", "content": "你是一位專業的香港中學數學教學助理，請使用繁體中文回答。"},
                             {"role": "user", "content": prompt}
-                        ]
+                        ],
+                        "max_tokens": 2048  # 指定輸出長度限制
                     }
-                    # 呼叫 Cloudflare Llama-3 70B / 8B 模型
-                    llm_res = run_cf_ai("@cf/meta/llama-3-8b-instruct", headers, payload=payload)
+                    
+                    # 呼叫 Cloudflare Llama-3-8b 模型
+                    llm_res = run_cf_ai("@cf/meta/llama-3-8b-instruct", llm_headers, payload=payload)
                     
                     if llm_res.get("success"):
                         result_md = llm_res.get("result", {}).get("response", "")
@@ -90,7 +94,9 @@ with tab1:
                             mime="text/markdown"
                         )
                     else:
-                        st.error("AI 生成紀錄失敗。")
+                        # 印出詳細錯誤訊息以便調試
+                        err_msg = llm_res.get("errors", [{}])[0].get("message", repr(llm_res))
+                        st.error(f"AI 生成紀錄失敗：{err_msg}")
 
 # ==========================================
 # Tab 2: 數學教案與題庫共享
