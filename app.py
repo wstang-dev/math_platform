@@ -28,7 +28,7 @@ with tab1:
     st.header("🎙️ 備課會議錄音轉寫與結構化紀錄")
     st.write("上傳備課會議錄音檔（MP3, M4A, WAV 等），Groq 將自動進行超高速語音轉寫與紀錄整理。")
 
-    audio_file = st.file_uploader("上傳會議錄音檔", type=["mp3", "m4a", "wav", "webm"])
+    audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
     if audio_file and client:
         if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
