@@ -35,11 +35,11 @@ with tab1:
             with st.spinner("1/2 使用 Whisper 進行極速語音轉寫..."):
                 try:
                    # 1. 呼叫 Groq Whisper 進行轉寫 (檔名統一寫 "audio.mp3" 避開中文檔名編碼錯誤)
-            transcription = client.audio.transcriptions.create(
-                file=("audio.mp3", audio_file.getvalue()),
-                model="whisper-large-v3",
-                response_format="text"
-            )
+                    transcription = client.audio.transcriptions.create(
+                        file=("audio.mp3", audio_file.getvalue()),
+                        model="whisper-large-v3",
+                        response_format="text"
+                    )
                     transcript_text = transcription
                     st.success("✅ 語音轉寫完成！")
                 except Exception as e:
