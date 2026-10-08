@@ -154,4 +154,5 @@ with tab1:
                     "content": st.session_state["current_note"]
                 }
                 history.append(new_record)
-                save_history(
+                save_history(history)
+                st.success("✅ 已成功儲存至平台資料庫！同事可在「歷年備課紀錄庫」查閱。")
