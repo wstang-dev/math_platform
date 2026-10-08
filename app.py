@@ -21,12 +21,14 @@ st.caption("專為數學科組設計：語音轉備課紀錄 | 校本題庫共�
 
 tab1, tab2, tab3 = st.tabs(["🎙️ 語音生成備課紀錄", "📝 數學教案與題庫共享", "🤖 AI 數學擬題助手"])
 
+import io  # 請確認 app.py 最頂部有 import io，若沒有請在最上方加入 import io
+
 # ==========================================
 # Tab 1: 語音生成備課紀錄
 # ==========================================
 with tab1:
     st.header("🎙️ 備課會議錄音轉寫與結構化紀錄")
-    st.write("上傳備課會議錄音檔（MP3, M4A, WAV 等），Groq 將自動進行超高速語音轉寫與紀錄整理。")
+    st.write("上傳備課會議錄音/影片檔（MP3, M4A, WAV, MP4 等），Groq 將自動進行超高速語音轉寫與紀錄整理。")
 
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
@@ -34,9 +36,13 @@ with tab1:
         if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
             with st.spinner("1/2 使用 Whisper 進行極速語音轉寫..."):
                 try:
-                   # 1. 呼叫 Groq Whisper 進行轉寫 (檔名統一寫 "audio.mp3" 避開中文檔名編碼錯誤)
+                    # 將上傳的檔案讀取為純 Byte 流，並手動賦予純英文 filename 屬性
+                    audio_bytes = io.BytesIO(audio_file.getvalue())
+                    audio_bytes.name = "input_audio.mp3"
+
+                    # 呼叫 Groq Whisper API
                     transcription = client.audio.transcriptions.create(
-                        file=("audio.mp3", audio_file.getvalue()),
+                        file=audio_bytes,
                         model="whisper-large-v3",
                         response_format="text"
                     )
@@ -77,7 +83,6 @@ with tab1:
                         )
                     except Exception as e:
                         st.error(f"AI 生成紀錄失敗：{e}")
-
 # ==========================================
 # Tab 2: 數學教案與題庫共享
 # ==========================================
