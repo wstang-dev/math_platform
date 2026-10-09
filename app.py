@@ -76,7 +76,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成
+# Tab 1: 集體備課紀錄生成 (極致 Point Form 防段落版)
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -92,7 +92,6 @@ with tab1:
     with col_g2:
         selected_school_year = st.selectbox("📅 請選擇學年：", ["2025-2026", "2026-2027"], index=1)
     with col_g3:
-        # ✨ 新增：自訂會議日期選擇器
         selected_meeting_date = st.date_input("🗓️ 請選擇會議日期：", value=date.today())
 
     col_t1, col_t2 = st.columns(2)
@@ -161,7 +160,6 @@ with tab1:
             else:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
-                # 轉成 DD-MM-YYYY 格式字串
                 formatted_date_str = selected_meeting_date.strftime("%d-%m-%Y")
 
                 # --- 1/3 廣東話優化 Whisper 轉寫 ---
@@ -209,25 +207,31 @@ with tab1:
                         else:
                             st.session_state["transcript_text"] = st.session_state["raw_transcript"]
 
-                # --- 3/3 AI 融合整理生成表格 (使用自訂日期) ---
+                # --- 3/3 AI 融合整理生成表格 (硬性 Point Form 格式限制) ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("3/3 AI 正在動態辨識會議課題並提煉校本備課紀錄..."):
+                    with st.spinner("3/3 AI 正在以『Point Form 清單格式』提煉校本備課紀錄..."):
                         clean_transcript = st.session_state["transcript_text"][:4500].replace("{", "(").replace("}", ")")
                         clean_guide = guide_text[:3500].replace("{", "(").replace("}", ")") if guide_text else "無提供手冊"
 
                         prompt = (
                             "你是一位香港資深小學數學科科主席（CDC 課程專家）。\n"
-                            "請閱讀【會議討論內容】，【自動辨識並歸納】老師們今天討論的數學單元與課題。\n\n"
-                            "【嚴格寫作限制規則】：\n"
-                            "1. **動態課題與完全忠於會議**：單元與課題名稱必須根據【會議討論內容】自動歸納，表格內容必須**完全來自會議內容**，絕對禁止編造無關課題！\n"
-                            "2. **手冊為輔（Elaborate）**：請從【校本備課手冊】尋找對應該課題的標準教學步驟（1. a. b.）、專業術語與課本/工作紙頁碼補充說明（Elaborate）。\n"
-                            "3. **格式規範**：嚴格輸出 3 個 Column 的 HTML `<table>` 表格，儲存格內換行統一使用 `<br>`，步驟以 1. 2. 與 a. b. 呈現。\n\n"
+                            "請閱讀【會議討論內容】，【自動辨識】老師們今天討論的數學單元與課題。\n\n"
+                            "【極嚴格 Point Form 與邊界限制】：\n"
+                            "1. **完全忠於錄音事實**：\n"
+                            "   - 單元與課題名稱必須完全依據【會議討論內容】歸納。\n"
+                            "   - 表格內容必須來自【會議討論內容】中老師們實際討論的細節。**嚴禁強加會議中完全沒提及的課題**！\n"
+                            "2. **強制使用 Point Form（條列式清單）**：\n"
+                            "   - 「教學程序 / 解決方法」欄位**絕對禁止寫成大段落長文**！\n"
+                            "   - 必須嚴格使用 `1.` `2.` `3.` 與 `a.` `b.` 清單格式，並且**每一個小點之間必須加入 `<br>` 換行**！\n"
+                            "   - 格式範例：\n"
+                            "     1. 老師展示 GeoGebra 動態圖形，引導學生觀察底與高的關係。<br>2. 學生進行分組探究：<br>&nbsp;&nbsp;a. 使用三角尺量度直角與高的長度。<br>&nbsp;&nbsp;b. 進行割補拼砌法轉換成已知圖形。<br>3. 運用進展性工作紙釐清對應底高概念。\n"
+                            "3. **手冊為輔（Elaborate）**：請從【校本備課手冊】尋找對應該課題的標準步驟與頁碼補充在 Point Form 中。\n\n"
                             "【第一順位：修正後的會議討論逐字稿】：\n" + clean_transcript + "\n\n"
                             "【第二順位：參考校本備課手冊】：\n" + clean_guide + "\n\n"
                             "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                            "**單元：** [AI 根據會議內容自動歸納]\n"
-                            "**課題：** [AI 根據會議內容自動歸納]\n"
+                            "**單元：** [AI 自動歸納，如：面積]\n"
+                            "**課題：** [AI 自動歸納，如：平行四邊形面積]\n"
                             "**日期：** " + formatted_date_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
@@ -237,7 +241,7 @@ with tab1:
                             "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
                             "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
                             "  </tr>\n"
-                            "  <!-- 根據會議事實，輸出 2 至 3 列完全忠於會議討論的 <tr> 區塊 -->\n"
+                            "  <!-- 輸出 2 至 3 列完全為 Point Form 清單格式且有 <br> 換行的 <tr> 區塊 -->\n"
                             "</table>"
                         )
                         
@@ -246,7 +250,7 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位嚴謹的香港小學數學專家，擅長精準辨識會議主題並提煉教案紀錄。"},
+                                    {"role": "system", "content": "你是一位嚴謹的香港小學數學專家，習慣使用條列式（Point Form）撰寫結構化教案。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
@@ -259,7 +263,7 @@ with tab1:
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.session_state["current_grade"] = selected_grade
                             st.session_state["current_year"] = selected_school_year
-                            st.toast("✅ 高質量紀錄生成成功！", icon="📋")
+                            st.toast("✅ 高質量 Point Form 紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
@@ -284,7 +288,7 @@ with tab1:
         
         # --- 打字指令讓 AI 自動修訂表格 ---
         st.subheader("💬 打字指示 AI 自動微調修訂")
-        refine_instruction = st.text_input("輸入您希望 AI 修改的指示：", placeholder="例如：請將日期改為 15-10-2026，並增加迷思概念釐清步驟。")
+        refine_instruction = st.text_input("輸入您希望 AI 修改的指示：", placeholder="例如：請全部改為 Point Form 點陣，並將資料來源改為校本工作紙 P.5。")
         
         if st.button("🤖 讓 AI 根據指示重新修訂表格", type="secondary"):
             if refine_instruction:
@@ -294,7 +298,7 @@ with tab1:
                         "請根據使用者提出的【修改指示】，修改並重新輸出以下備課紀錄 HTML 表格。\n\n"
                         "【修改指示】：\n" + refine_instruction + "\n\n"
                         "【原本的備課紀錄內容】：\n" + st.session_state["current_note"] + "\n\n"
-                        "請保持標準 HTML 3 欄 <table> 格式，輸出完整修改後的 Markdown/HTML 紀錄。"
+                        "請務必保持點陣清單（Point Form）與標準 HTML 3 欄 <table> 格式，儲存格內換行請加 <br>。"
                     )
                     
                     refine_res = run_cf_ai(
@@ -302,7 +306,7 @@ with tab1:
                         {"Authorization": f"Bearer {cf_api_token}"}, 
                         payload={
                             "messages": [
-                                {"role": "system", "content": "你是一位聽從教師修訂指令的專業教案修改助理。"},
+                                {"role": "system", "content": "你是一位聽從教師修訂指令的專業教案修改助理，習慣輸出清晰的 Point Form。"},
                                 {"role": "user", "content": refine_prompt}
                             ],
                             "max_tokens": 2500,
