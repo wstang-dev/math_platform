@@ -5,13 +5,21 @@ import os
 import requests
 import time
 import base64
+import io
 
-# 嘗試載入 docx 解析庫
+# 嘗試載入 Word (docx) 解析庫
 try:
     import docx
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
+
+# 嘗試載入 PDF (pypdf) 解析庫
+try:
+    import pypdf
+    HAS_PDF = True
+except ImportError:
+    HAS_PDF = False
 
 # 頁面基本設定
 st.set_page_config(page_title="小學數學科校本 AI 輔助平台", layout="wide", page_icon="📐")
@@ -69,7 +77,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（融合備課手冊資料庫）
+# Tab 1: 集體備課紀錄生成（支援 PDF/Word 備課手冊）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -101,18 +109,32 @@ with tab1:
 
     st.divider()
 
-    # --- 輸入檔案區（錄音檔 + 可選備課手冊）---
+    # --- 輸入檔案區（錄音檔 + 支援 PDF / Word 備課手冊）---
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         audio_file = st.file_uploader("1️⃣ 上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
     with col_f2:
-        guide_file = st.file_uploader("2️⃣ 📘 (可選) 上傳校本備課手冊 / 課題指引 (.docx / .txt)", type=["docx", "txt", "md"])
+        guide_file = st.file_uploader("2️⃣ 📘 (可選) 上傳校本備課手冊 / 課題指引 (.pdf / .docx)", type=["pdf", "docx", "txt", "md"])
 
-    # 解析上傳的備課手冊內容
+    # 解析上傳的備課手冊內容 (PDF 或 Word)
     guide_text = ""
     if guide_file:
         guide_ext = guide_file.name.split(".")[-1].lower()
-        if guide_ext == "docx":
+        
+        # 解析 PDF
+        if guide_ext == "pdf":
+            if HAS_PDF:
+                try:
+                    pdf_reader = pypdf.PdfReader(io.BytesIO(guide_file.getvalue()))
+                    page_texts = [page.extract_text() for page in pdf_reader.pages if page.extract_text()]
+                    guide_text = "\n".join(page_texts)
+                except Exception as e:
+                    st.error(f"❌ PDF 解析失敗：{str(e)}")
+            else:
+                st.error("⚠️ 伺服器缺少 pypdf 模組，請在 requirements.txt 加入 pypdf。")
+                
+        # 解析 Word (.docx)
+        elif guide_ext == "docx":
             if HAS_DOCX:
                 doc = docx.Document(guide_file)
                 guide_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
@@ -125,7 +147,7 @@ with tab1:
             guide_text = guide_file.getvalue().decode("utf-8")
         
         if guide_text:
-            st.success(f"📖 已順利載入參考備課手冊：「{guide_file.name}」（共 {len(guide_text)} 字）")
+            st.success(f"📖 已順利讀取校本備課手冊：「{guide_file.name}」（共提煉 {len(guide_text)} 個字元）")
 
     if audio_file:
         file_bytes = audio_file.getvalue()
@@ -140,7 +162,7 @@ with tab1:
                 recorder_str = selected_recorder
 
                 # --- 1/2 語音轉寫 ---
-                with st.spinner("1/2 語音轉寫中（連線 Cloudflare Whisper 節點）..."):
+                with st.spinner("1/2 語音轉寫中（透過安全通道連線 Cloudflare Whisper）..."):
                     headers = {
                         "Authorization": f"Bearer {cf_api_token}", 
                         "Content-Type": "application/json"
@@ -173,12 +195,12 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                # --- 2/2 AI 融合【逐字稿 + 備課手冊】整理紀錄 ---
+                # --- 2/2 AI 融合【逐字稿 + PDF 備課手冊】整理紀錄 ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在融合「會議逐字稿」與「校本備課手冊」，生成精準紀錄..."):
+                    with st.spinner("2/2 AI 正在融合「會議逐字稿」與「PDF 備課手冊」，生成精準紀錄..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4500].replace("{", "(").replace("}", ")")
-                        clean_guide = guide_text[:3000].replace("{", "(").replace("}", ")") if guide_text else "無提供額外手冊，請純粹修訂逐字稿中的數學術語。"
+                        clean_guide = guide_text[:3500].replace("{", "(").replace("}", ")") if guide_text else "無提供額外手冊，請純粹修訂逐字稿中的數學術語。"
 
                         prompt = (
                             "你是一位香港資深小學數學科科主席與課程專家（CDC）。\n"
@@ -226,7 +248,7 @@ with tab1:
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.session_state["current_grade"] = selected_grade
                             st.session_state["current_year"] = selected_school_year
-                            st.toast("✅ 結合校本手冊的高質量紀錄生成成功！", icon="📋")
+                            st.toast("✅ 結合校本 PDF 手冊的高質量紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
