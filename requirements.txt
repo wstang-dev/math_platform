@@ -1,7 +1,5 @@
 streamlit
-requests
-markdown
-PyGithub
-python-docx
 pandas
+python-docx
 pypdf
+requests
