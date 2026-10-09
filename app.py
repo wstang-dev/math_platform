@@ -61,7 +61,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（簡化 3 欄高效版）
+# Tab 1: 集體備課紀錄生成（HTML 100% 穩定表格版）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -121,21 +121,31 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                # --- 2/2 AI 整理校本表格（只輸出 3 個 Column，穩定防破裂）---
+                # --- 2/2 AI 整理校本表格（採用 HTML Table 結構，徹底告別破版）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在分析會議內容，生成 3 欄結構化紀錄..."):
+                    with st.spinner("2/2 AI 正在分析會議內容，生成 3 欄 HTML 完美表格..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
                         
                         prompt = (
                             "你是一位香港資深小學數學科科主席。\n"
                             "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份結構清晰的「小學數學科集體備課紀錄」。\n\n"
-                            "【格式與欄位極嚴格指示】：\n"
-                            "1. **絕對不輸出校名**。\n"
-                            "2. **只允許 3 個 Column**：表格標頭必須嚴格為 `| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 |`。\n"
-                            "3. **儲存格內換行**：表格內部【絕對禁止 Enter 換行】，換行必須統一寫成 `<br>`，確保表格 100% 鎖在同一列內不破裂。\n"
-                            "4. **次級清單結構**：\n"
-                            "   - 教學程序請使用 `1. ...<br>&nbsp;&nbsp;a. ...<br>&nbsp;&nbsp;b. ...` 展示細節與步驟。\n\n"
+                            "【極嚴格輸出格式指示】：\n"
+                            "1. **不輸出校名**。\n"
+                            "2. **表格必須使用 HTML <table> 語法**，結構如下：\n"
+                            "   <table border='1' style='width:100%; border-collapse:collapse;'>\n"
+                            "     <tr style='background-color:#f2f2f2;'>\n"
+                            "       <th style='width:30%; padding:8px;'>教學重點 / 難點</th>\n"
+                            "       <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
+                            "       <th style='width:20%; padding:8px;'>資料來源</th>\n"
+                            "     </tr>\n"
+                            "     <tr>\n"
+                            "       <td style='padding:8px; vertical-align:top;'>[教學重點1與學生迷思]</td>\n"
+                            "       <td style='padding:8px; vertical-align:top;'>[教學程序1，包含 1. a. b. c.]</td>\n"
+                            "       <td style='padding:8px; vertical-align:top;'>[資料來源]</td>\n"
+                            "     </tr>\n"
+                            "   </table>\n"
+                            "3. 儲存格內部換行請直接使用 `<br>` 或 `<p>`，內容必須層次分明（使用 1. 2. 與 a. b. c.）。\n\n"
                             "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
                             "**單元：** [單元名稱]  \n"
@@ -143,9 +153,30 @@ with tab1:
                             "**日期：** " + today_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
-                            "| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 |\n"
-                            "| :--- | :--- | :--- |\n"
-                            "| 1. 平行四邊形面積計算<br><br>2. 學生未能找出底和對應的高 | 1. 介紹平行四邊形面積公式<br>&nbsp;&nbsp;a. 使用教具：三角尺，直角尺找出對應的底和高<br>&nbsp;&nbsp;b. 老師示範用 GeoGebra 將平行四邊形分割再拼成長方形<br>&nbsp;&nbsp;c. 提供實例計算<br><br>2. 強調找到對應的底和高<br>&nbsp;&nbsp;a. 使用進展工作紙找底部和高的關係，強化學生對底部和高的理解 | 教科書<br>GeoGebra<br>工作紙 |\n\n"
+                            "<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>\n"
+                            "  <tr style='background-color:#f2f2f2;'>\n"
+                            "    <th style='width:30%; padding:8px;'>教學重點 / 難點</th>\n"
+                            "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
+                            "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
+                            "  </tr>\n"
+                            "  <tr>\n"
+                            "    <td style='padding:8px; vertical-align:top;'>\n"
+                            "      1. 平行四邊形面積計算<br><br>\n"
+                            "      2. 學生未能找出底和對應的高\n"
+                            "    </td>\n"
+                            "    <td style='padding:8px; vertical-align:top;'>\n"
+                            "      1. 介紹平行四邊形面積公式<br>\n"
+                            "      &nbsp;&nbsp;a. 使用教具：三角尺、直角尺找出對應的底和高<br>\n"
+                            "      &nbsp;&nbsp;b. 老師示範用 GeoGebra 將平行四邊形分割再拼成長方形<br>\n"
+                            "      &nbsp;&nbsp;c. 提供實例計算<br><br>\n"
+                            "      2. 強調找到對應的底和高<br>\n"
+                            "      &nbsp;&nbsp;a. 使用進展工作紙找底部和高的關係，強化學生對底部和高的理解\n"
+                            "    </td>\n"
+                            "    <td style='padding:8px; vertical-align:top;'>\n"
+                            "      教科書<br>GeoGebra<br>工作紙\n"
+                            "    </td>\n"
+                            "  </tr>\n"
+                            "</table>\n\n"
                             "會議逐字稿內容：\n" + clean_transcript
                         )
                         
@@ -154,7 +185,7 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位專業的香港小學數學教學助理，只輸出 3 欄標準 Markdown 表格，排版極其穩定。"},
+                                    {"role": "system", "content": "你是一位專業的香港小學數學教學助理，輸出完美的 HTML Table，格式 100% 穩定無懈可擊。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
@@ -179,11 +210,12 @@ with tab1:
         tab_preview, tab_edit = st.tabs(["👁️ 預覽校本表格", "✏️ 編輯與修正錯字"])
         
         with tab_edit:
-            edited_note = st.text_area("Markdown 內容編輯區", value=st.session_state["current_note"], height=400)
+            edited_note = st.text_area("HTML / Markdown 內容編輯區", value=st.session_state["current_note"], height=400)
             st.session_state["current_note"] = edited_note
             
         with tab_preview:
-            st.markdown(st.session_state["current_note"])
+            # 允許 HTML 渲染，確保 HTML <table> 100% 美觀呈現
+            st.markdown(st.session_state["current_note"], unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -219,7 +251,7 @@ with tab2:
         idx = titles.index(selected)
         item = list(reversed(history))[idx]
         
-        st.markdown(item["content"])
+        st.markdown(item["content"], unsafe_allow_html=True)
         st.download_button("📥 下載此紀錄 (.md)", data=item["content"], file_name=f"{item['title']}.md", mime="text/markdown")
 
 # ==========================================
