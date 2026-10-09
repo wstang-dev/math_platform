@@ -62,7 +62,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（HTML 100% 穩定表格 + Whisper 多重重試版）
+# Tab 1: 集體備課紀錄生成
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -112,7 +112,7 @@ with tab1:
                     models = [
                         "@cf/openai/whisper-large-v3-turbo", 
                         "@cf/openai/whisper",
-                        "@cf/openai/whisper-large-v3-turbo" # 再次重試
+                        "@cf/openai/whisper-large-v3-turbo"
                     ]
                     
                     res = None
@@ -120,7 +120,7 @@ with tab1:
                         res = run_cf_ai(m, whisper_headers, payload=file_bytes, is_binary=True)
                         if res and res.get("success"):
                             break
-                        time.sleep(1.5) # 稍微等待後進行重試
+                        time.sleep(1.5)
                     
                     if res and res.get("success"):
                         st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
@@ -129,32 +129,20 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "Cloudflare 語音服務繁忙") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}。請稍等 5 秒後重新點擊「🚀 開始分析錄音」。")
 
-                # --- 2/2 AI 整理校本表格 ---
+                # --- 2/2 AI 整理校本表格（不重複內容指令）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在分析會議內容，生成 3 欄 HTML 完美表格..."):
+                    with st.spinner("2/2 AI 正在深入分析語音內容，提煉不重複的校本教學程序..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
                         
                         prompt = (
-                            "你是一位香港資深小學數學科科主席。\n"
-                            "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份結構清晰的「小學數學科集體備課紀錄」。\n\n"
-                            "【極嚴格輸出格式指示】：\n"
-                            "1. **絕對不輸出校名**。\n"
-                            "2. **表格必須使用 HTML <table> 語法**，結構如下：\n"
-                            "   <table border='1' style='width:100%; border-collapse:collapse;'>\n"
-                            "     <tr style='background-color:#f2f2f2;'>\n"
-                            "       <th style='width:30%; padding:8px;'>教學重點 / 難點</th>\n"
-                            "       <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
-                            "       <th style='width:20%; padding:8px;'>資料來源</th>\n"
-                            "     </tr>\n"
-                            "     <tr>\n"
-                            "       <td style='padding:8px; vertical-align:top;'>[教學重點1與學生迷思]</td>\n"
-                            "       <td style='padding:8px; vertical-align:top;'>[教學程序1，包含 1. a. b. c.]</td>\n"
-                            "       <td style='padding:8px; vertical-align:top;'>[資料來源]</td>\n"
-                            "     </tr>\n"
-                            "   </table>\n"
-                            "3. 儲存格內部換行請直接使用 `<br>`，內容必須層次分明（使用 1. 2. 與 a. b. c.）。\n\n"
-                            "【輸出格式模板】：\n"
+                            "你是一位香港資深小學數學科科主席與課程專家。\n"
+                            "請【嚴格根據以下備課會議逐字稿】，提煉出一份高質感、完全不重複的「小學數學科集體備課紀錄」。\n\n"
+                            "【極重要撰寫要求】：\n"
+                            "1. **絕對禁止重複複製套話**：每一點的「教學程序 / 解決方法」必須根據會議中實際討論的不同環節撰寫，絕對不可將同一句說明複製到多個欄位中！\n"
+                            "2. **精簡並歸納為 2 至 3 欄大重點**：請將討論內容系統化整合為 2 到 3 個核心項目，不要拆碎成多條內容相同的重複項目。\n"
+                            "3. **嚴格使用 HTML <table> 輸出**：絕對不輸出校名，欄位固定為：`教學重點 / 難點`、`教學程序 / 解決方法`、`資料來源`。儲存格內換行請使用 `<br>`，並使用 1. 2. 與 a. b. c. 進行清晰縮排。\n\n"
+                            "【輸出格式規範】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
                             "**單元：** [單元名稱]  \n"
                             "**課題：** [課題名稱]  \n"
@@ -167,23 +155,7 @@ with tab1:
                             "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
                             "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
                             "  </tr>\n"
-                            "  <tr>\n"
-                            "    <td style='padding:8px; vertical-align:top;'>\n"
-                            "      1. 平行四邊形面積計算<br><br>\n"
-                            "      2. 學生未能找出底和對應的高\n"
-                            "    </td>\n"
-                            "    <td style='padding:8px; vertical-align:top;'>\n"
-                            "      1. 介紹平行四邊形面積公式<br>\n"
-                            "      &nbsp;&nbsp;a. 使用教具：三角尺、直角尺找出對應的底和高<br>\n"
-                            "      &nbsp;&nbsp;b. 老師示範用 GeoGebra 將平行四邊形分割再拼成長方形<br>\n"
-                            "      &nbsp;&nbsp;c. 提供實例計算<br><br>\n"
-                            "      2. 強調找到對應的底和高<br>\n"
-                            "      &nbsp;&nbsp;a. 使用進展工作紙找底部和高的關係，強化學生對底部和高的理解\n"
-                            "    </td>\n"
-                            "    <td style='padding:8px; vertical-align:top;'>\n"
-                            "      教科書<br>GeoGebra<br>工作紙\n"
-                            "    </td>\n"
-                            "  </tr>\n"
+                            "  <!-- 根據逐字稿內容，輸出 2-3 列不重複的 <tr> 結構 -->\n"
                             "</table>\n\n"
                             "會議逐字稿內容：\n" + clean_transcript
                         )
@@ -193,20 +165,22 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位專業的香港小學數學教學助理，輸出完美的 HTML Table，格式 100% 穩定無懈可擊。"},
+                                    {"role": "system", "content": "你是一位專業的香港小學數學課程專家，善於歸納總結會議重點，輸出內容絕不重複、條理極為清晰。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
-                                "temperature": 0.1
+                                "temperature": 0.2
                             }
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
-                            st.toast("✅ 備課紀錄生成成功！", icon="📋")
+                            st.session_state["current_grade"] = selected_grade
+                            st.session_state["current_year"] = selected_school_year
+                            st.toast("✅ 高質量校本紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
-    # 2. 展示區
+    # 展示區
     if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
         with st.expander("📄 點擊展開 / 隱藏「會議完整逐字稿」", expanded=False):
             st.text_area("逐字稿內容", value=st.session_state["transcript_text"], height=180)
@@ -236,30 +210,78 @@ with tab1:
             if st.button("💾 儲存至歷年紀錄庫", type="primary"):
                 history = load_data(HISTORY_FILE)
                 history.append({
-                    "id": len(history) + 1,
+                    "id": int(time.time()),
+                    "year": st.session_state.get("current_year", selected_school_year),
+                    "grade": f"{st.session_state.get('current_grade', selected_grade)}年級",
                     "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "title": f"{selected_grade}年級備課紀錄_({datetime.now().strftime('%Y-%m-%d')})",
+                    "title": f"（{st.session_state.get('current_grade', selected_grade)}）年級備課紀錄 ({st.session_state.get('current_year', selected_school_year)})",
                     "content": st.session_state["current_note"]
                 })
                 save_data(HISTORY_FILE, history)
-                st.success("✅ 已成功儲存！可在「📚 歷年備課紀錄庫」查閱。")
+                st.success("✅ 已成功儲存！可在「📚 歷年備課紀錄庫」分頁按年度與年級查閱。")
 
 # ==========================================
-# Tab 2: 歷年備課紀錄庫
+# Tab 2: 歷年備課紀錄庫（按年度/年級篩選 + 刪除功能）
 # ==========================================
 with tab2:
     st.header("📚 歷年備課紀錄庫")
     history = load_data(HISTORY_FILE)
+    
     if not history:
         st.info("目前尚無儲存的備課紀錄。可以在 Tab 1 生成或修訂後點擊「💾 儲存至歷年紀錄庫」。")
     else:
-        titles = [f"{item['date']} - {item['title']}" for item in reversed(history)]
-        selected = st.selectbox("選擇要查閱的備課紀錄", titles)
-        idx = titles.index(selected)
-        item = list(reversed(history))[idx]
+        # 篩選工具列
+        st.subheader("🔍 篩選與檢索")
+        col_f1, col_f2 = st.columns(2)
         
-        st.markdown(item["content"], unsafe_allow_html=True)
-        st.download_button("📥 下載此紀錄 (.md)", data=item["content"], file_name=f"{item['title']}.md", mime="text/markdown")
+        # 動態提取已有年度與年級選項
+        available_years = ["全部學年"] + sorted(list(set([item.get("year", "未知學年") for item in history])), reverse=True)
+        available_grades = ["全部年級"] + sorted(list(set([item.get("grade", "未知年級") for item in history])))
+        
+        with col_f1:
+            filter_year = st.selectbox("📅 依學年篩選：", available_years)
+        with col_f2:
+            filter_grade = st.selectbox("📌 依年級篩選：", available_grades)
+            
+        # 進行資料過濾
+        filtered_history = history
+        if filter_year != "全部學年":
+            filtered_history = [item for item in filtered_history if item.get("year") == filter_year]
+        if filter_grade != "全部年級":
+            filtered_history = [item for item in filtered_history if item.get("grade") == filter_grade]
+            
+        st.divider()
+        
+        if not filtered_history:
+            st.warning("⚠️ 沒有符合條件的備課紀錄。")
+        else:
+            titles_map = {
+                f"[{item.get('year', '')}][{item.get('grade', '')}] {item['date']} - {item['title']}": item
+                for item in reversed(filtered_history)
+            }
+            
+            selected_title = st.selectbox("請選擇要查閱或管理的備課紀錄：", list(titles_map.keys()))
+            selected_item = titles_map[selected_title]
+            
+            st.markdown(selected_item["content"], unsafe_allow_html=True)
+            
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.download_button(
+                    "📥 下載此紀錄 (.md)", 
+                    data=selected_item["content"], 
+                    file_name=f"{selected_item['title']}.md", 
+                    mime="text/markdown"
+                )
+            with col_d2:
+                # 刪除功能按鈕
+                if st.button(f"🗑️ 刪除這筆紀錄 ({selected_item['date']})", type="secondary"):
+                    # 執行刪除
+                    updated_history = [h for h in history if h.get("id") != selected_item.get("id")]
+                    save_data(HISTORY_FILE, updated_history)
+                    st.success("🗑️ 該紀錄已成功刪除！")
+                    time.sleep(1)
+                    st.rerun()
 
 # ==========================================
 # Tab 3: 課堂互動教材庫 (HTML5 / AI 遊戲)
@@ -278,7 +300,7 @@ with tab3:
                 html_code = html_file.getvalue().decode("utf-8")
                 games = load_data(GAMES_FILE)
                 games.append({
-                    "id": len(games) + 1,
+                    "id": int(time.time()),
                     "title": game_title,
                     "grade": game_grade,
                     "date": datetime.now().strftime("%Y-%m-%d"),
