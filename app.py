@@ -4,20 +4,14 @@ import json
 import os
 import requests
 import time
-import io
+import base64
 
-# 嘗試載入 docx 與 pydub 解析庫
+# 嘗試載入 docx 解析庫
 try:
     import docx
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
-
-try:
-    from pydub import AudioSegment
-    HAS_PYDUB = True
-except ImportError:
-    HAS_PYDUB = False
 
 # 頁面基本設定
 st.set_page_config(page_title="小學數學科校本 AI 輔助平台", layout="wide", page_icon="📐")
@@ -59,13 +53,13 @@ def save_data(file_path, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-def run_cf_ai(model_name, headers, payload, is_binary=False):
+def run_cf_ai(model_name, headers, payload, is_json=True, timeout=180):
     url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account_id}/ai/run/{model_name}"
     try:
-        if is_binary:
-            response = requests.post(url, headers=headers, data=payload, timeout=300)
+        if is_json:
+            response = requests.post(url, headers=headers, json=payload, timeout=timeout)
         else:
-            response = requests.post(url, headers=headers, json=payload, timeout=300)
+            response = requests.post(url, headers=headers, data=payload, timeout=timeout)
         return response.json()
     except Exception as e:
         return {"success": False, "errors": [{"message": str(e)}]}
@@ -75,7 +69,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成
+# Tab 1: 集體備課紀錄生成（融合備課手冊資料庫）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -107,91 +101,101 @@ with tab1:
 
     st.divider()
 
-    audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
+    # --- 輸入檔案區（錄音檔 + 可選備課手冊）---
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        audio_file = st.file_uploader("1️⃣ 上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
+    with col_f2:
+        guide_file = st.file_uploader("2️⃣ 📘 (可選) 上傳校本備課手冊 / 課題指引 (.docx / .txt)", type=["docx", "txt", "md"])
+
+    # 解析上傳的備課手冊內容
+    guide_text = ""
+    if guide_file:
+        guide_ext = guide_file.name.split(".")[-1].lower()
+        if guide_ext == "docx":
+            if HAS_DOCX:
+                doc = docx.Document(guide_file)
+                guide_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                for table in doc.tables:
+                    for row in table.rows:
+                        guide_text += "\n" + " | ".join([cell.text.strip() for cell in row.cells])
+            else:
+                st.error("⚠️ 伺服器缺少 python-docx，無法讀取 Word 檔案。")
+        else:
+            guide_text = guide_file.getvalue().decode("utf-8")
+        
+        if guide_text:
+            st.success(f"📖 已順利載入參考備課手冊：「{guide_file.name}」（共 {len(guide_text)} 字）")
 
     if audio_file:
         file_bytes = audio_file.getvalue()
         file_size_mb = len(file_bytes) / (1024 * 1024)
-        
-        st.caption(f"📁 目前上傳檔案大小：{file_size_mb:.2f} MB")
+        st.caption(f"📁 錄音檔案大小：{file_size_mb:.2f} MB")
 
-        if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
+        if st.button("🚀 開始分析錄音並生成校本紀錄", type="primary"):
             if not cf_account_id or not cf_api_token:
                 st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
             else:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
 
-                # --- 1/2 語音轉寫 (極速穩定版) ---
-                with st.spinner("1/2 語音轉寫中（連線 Cloudflare Whisper 節點，請稍候）..."):
-                    whisper_headers = {"Authorization": f"Bearer {cf_api_token}", "Content-Type": "application/octet-stream"}
-                    model_name = "@cf/openai/whisper-large-v3-turbo"
+                # --- 1/2 語音轉寫 ---
+                with st.spinner("1/2 語音轉寫中（連線 Cloudflare Whisper 節點）..."):
+                    headers = {
+                        "Authorization": f"Bearer {cf_api_token}", 
+                        "Content-Type": "application/json"
+                    }
+                    audio_int_list = list(file_bytes)
                     
-                    transcripts = []
+                    models = [
+                        "@cf/openai/whisper-large-v3-turbo",
+                        "@cf/openai/whisper"
+                    ]
                     
-                    # 檔案小於 15MB 直接全量傳送
-                    if file_size_mb <= 15 or not HAS_PYDUB:
-                        res = run_cf_ai(model_name, whisper_headers, payload=file_bytes, is_binary=True)
+                    res = None
+                    for m in models:
+                        res = run_cf_ai(m, headers, payload={"audio": audio_int_list}, is_json=True)
                         if res and res.get("success"):
-                            transcripts.append(res.get("result", {}).get("text", ""))
-                        else:
-                            # 備用模型
-                            res2 = run_cf_ai("@cf/openai/whisper", whisper_headers, payload=file_bytes, is_binary=True)
-                            if res2 and res2.get("success"):
-                                transcripts.append(res2.get("result", {}).get("text", ""))
+                            break
+                        time.sleep(1)
+                    
+                    if not (res and res.get("success")):
+                        binary_headers = {
+                            "Authorization": f"Bearer {cf_api_token}", 
+                            "Content-Type": "application/octet-stream"
+                        }
+                        res = run_cf_ai("@cf/openai/whisper-large-v3-turbo", binary_headers, payload=file_bytes, is_json=False)
+
+                    if res and res.get("success"):
+                        st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
+                        st.toast("✅ 語音轉寫成功！", icon="🎙️")
                     else:
-                        # 若有 pydub 進行標準音訊時間切割
-                        try:
-                            audio = AudioSegment.from_file(io.BytesIO(file_bytes))
-                            chunk_length_ms = 5 * 60 * 1000 # 5 分鐘一段
-                            chunks = [audio[i:i + chunk_length_ms] for i in range(0, len(audio), chunk_length_ms)]
-                            
-                            st.info(f"💡 錄音長度約 {len(audio)//60000} 分鐘，已自動優化分段發送...")
-                            for i, chunk in enumerate(chunks):
-                                out = io.BytesIO()
-                                chunk.export(out, format="mp3")
-                                st.text(f"⏳ 分析第 {i+1}/{len(chunks)} 段...")
-                                res = run_cf_ai(model_name, whisper_headers, payload=out.getvalue(), is_binary=True)
-                                if res and res.get("success"):
-                                    transcripts.append(res.get("result", {}).get("text", ""))
-                                time.sleep(1)
-                        except Exception as ex:
-                            # 切割失敗退回直傳
-                            res = run_cf_ai(model_name, whisper_headers, payload=file_bytes, is_binary=True)
-                            if res and res.get("success"):
-                                transcripts.append(res.get("result", {}).get("text", ""))
+                        err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
+                        st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                    full_text = " ".join(transcripts).strip()
-
-                    if full_text:
-                        st.session_state["transcript_text"] = full_text
-                        st.toast("✅ 語音轉寫全部完成！", icon="🎙️")
-                    else:
-                        st.error("❌ 語音轉寫失敗：Cloudflare 伺服器連線超時。")
-                        st.info("💡 建議處理解決方式：\n1. 直接使用「📚 歷年備課紀錄庫」上載已有的 Word (.docx) 檔歸檔。\n2. 將音訊剪輯為 10 分鐘以內後重新上傳。")
-
-                # --- 2/2 AI 整理校本表格（專業術語修訂）---
+                # --- 2/2 AI 融合【逐字稿 + 備課手冊】整理紀錄 ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在分析會議內容，精準校正數學專業術語..."):
+                    with st.spinner("2/2 AI 正在融合「會議逐字稿」與「校本備課手冊」，生成精準紀錄..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4500].replace("{", "(").replace("}", ")")
-                        
+                        clean_guide = guide_text[:3000].replace("{", "(").replace("}", ")") if guide_text else "無提供額外手冊，請純粹修訂逐字稿中的數學術語。"
+
                         prompt = (
                             "你是一位香港資深小學數學科科主席與課程專家（CDC）。\n"
-                            "請根據以下會議逐字稿，撰寫一份極具專業深度、條理分明且精準的「集體備課紀錄」。\n\n"
-                            "【極重要專業術語修訂與教學寫作規則】：\n"
-                            "1. **同音字與口語校正**：\n"
-                            "   - 逐字稿中的「體型」必須自動修訂為「**梯形**」。\n"
-                            "   - 逐字稿中的「周界」若指邊長，請根據語境修訂為「**底與高的關係**」或「**邊長**」。\n"
-                            "   - 若討論課題為平行四邊形，請將提及的「直角三角形」根據語境修訂為「**平行四邊形內的高與直角關係**」。\n"
-                            "2. **高質量的教學程序（1. 配合 a. b. c.）**：\n"
-                            "   - 「教學程序 / 解決方法」欄位請寫出具體的課堂操作（例如：使用三角尺及直角尺量度高、GeoGebra 割補分割拼砌、進展工作紙釐清迷思）。\n"
-                            "   - **絕對禁止複製上一行的內容到下一行**！每一行必須獨立針對不同的教學重點。\n"
-                            "3. **格式要求**：只輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），絕對不輸出校名，儲存格內換行統一使用 `<br>`。\n\n"
+                            "請結合【參考校本備課手冊/指引】的專業術語與標準架構，對【會議討論逐字稿】進行綜合提煉，撰寫一份極具專業深度、條理分明且符合校本規範的「集體備課紀錄」。\n\n"
+                            "【極重要寫作規則】：\n"
+                            "1. **語意校正與專業術語對齊**：\n"
+                            "   - 優先參考【備課手冊】中的專用術語（如：梯形、對應底高、割補拼砌法、對線練習），自動修正逐字稿中的廣東話口語或轉寫錯字（如將「體型」修正為「梯形」）。\n"
+                            "2. **豐富且具體的教學程序（1. 配合 a. b. c. 縮排）**：\n"
+                            "   - 「教學程序 / 解決方法」欄位請融合手冊內的標準活動（如：使用三角尺量度、GeoGebra 動態演示、進展工作紙釐清迷思），展開為 1. 2. 與 a. b. c. 步驟。\n"
+                            "   - **絕對禁止重複複製上一行的文字**！每一行必須針對不同的教學重點與難點。\n"
+                            "3. **格式規範**：嚴格輸出 3 個 Column 的 HTML `<table>`（教學重點 / 難點、教學程序 / 解決方法、資料來源），絕對不輸出校名，儲存格內換行統一使用 `<br>`。\n\n"
+                            "【參考校本備課手冊 / 課題指引】：\n" + clean_guide + "\n\n"
+                            "【會議討論逐字稿內容】：\n" + clean_transcript + "\n\n"
                             "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                            "**單元：** [根據逐字稿歸納單元，如：平面圖形面積]  \n"
-                            "**課題：** [根據逐字稿歸納課題，如：平行四邊形面積]  \n"
+                            "**單元：** [根據內容寫單元]  \n"
+                            "**課題：** [根據內容寫課題]  \n"
                             "**日期：** " + today_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
@@ -201,9 +205,8 @@ with tab1:
                             "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
                             "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
                             "  </tr>\n"
-                            "  <!-- 根據逐字稿，輸出 2 至 3 列完全不重複且修正術語後的 <tr> 區塊 -->\n"
-                            "</table>\n\n"
-                            "會議逐字稿內容：\n" + clean_transcript
+                            "  <!-- 輸出 2 至 3 列完全不重複、融合手冊術語的 <tr> 區塊 -->\n"
+                            "</table>"
                         )
                         
                         llm_res = run_cf_ai(
@@ -211,18 +214,19 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位專業的香港小學數學課程專家，善於校正語音錯別字，輸出專業且不重複的教學步驟。"},
+                                    {"role": "system", "content": "你是一位專業的香港小學數學課程發展專家，善於將會議討論與校本指引結合，輸出高質量的校本教案紀錄。"},
                                     {"role": "user", "content": prompt}
                                 ],
-                                "max_tokens": 2500,
+                                "max_tokens": 2800,
                                 "temperature": 0.2
-                            }
+                            },
+                            is_json=True
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.session_state["current_grade"] = selected_grade
                             st.session_state["current_year"] = selected_school_year
-                            st.toast("✅ 高質量校本紀錄生成成功！", icon="📋")
+                            st.toast("✅ 結合校本手冊的高質量紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
