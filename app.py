@@ -62,7 +62,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（黃金高質量內容版）
+# Tab 1: 集體備課紀錄生成
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -129,29 +129,23 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "Cloudflare 語音服務繁忙") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}。請稍等 5 秒後重新點擊「🚀 開始分析錄音」。")
 
-                # --- 2/2 AI 整理校本表格（黃金品質內容）---
+                # --- 2/2 AI 整理校本表格 ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在分析會議內容，精緻化整理校本教學程序..."):
+                    with st.spinner("2/2 AI 正在分析會議內容，提煉結構化紀錄..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
                         
                         prompt = (
-                            "你是一位香港資深小學數學科科主席與課程發展專家（CDC）。\n"
-                            "請根據以下會議逐字稿，撰寫一份極具專業深度、條理分明且符合香港小學數學課程指引的「集體備課紀錄」。\n\n"
-                            "【高質量寫作原則】：\n"
-                            "1. **專業語言校正與提煉**：修正廣東話口語及轉寫錯字（如「體型」改為「梯形」、「周界」若指邊長則修正語境），轉換為專業數學教學用語。\n"
-                            "2. **豐富且層次分明的教學程序（1. 搭配 a. b. c.）**：\n"
-                            "   - 每個教學程序必須包含具體操作步驟，例如：\n"
-                            "     `1. 介紹平行四邊形面積公式與對應底高`\n"
-                            "     `   a. 使用教具：指導學生運用三角尺與直角尺，準確量度並繪出對應的高`\n"
-                            "     `   b. 幾何探究：利用 GeoGebra 或幾何紙，示範將平行四邊形沿高剪開並割補拼砌成長方形`\n"
-                            "     `   c. 鞏固應用：提供具體實例計算，強調面積 = 底 × 高`\n"
-                            "3. **澄清學生常見迷思**：針對「混淆斜邊與高」、「找不到對應底高」等難點，設計具體的澄清策略（如進展工作紙、對線練習）。\n"
-                            "4. **嚴格 HTML <table> 輸出**：絕對不輸出校名，輸出 3 個 Column（教學重點 / 難點、教學程序 / 解決方法、資料來源），儲存格內換行統一使用 `<br>`。\n\n"
-                            "【輸出格式模板】：\n"
+                            "你是一位香港資深小學數學科科主席與課程專家。\n"
+                            "請【完全根據以下會議逐字稿的真實討論內容】，整理出一份結構清晰的「小學數學科集體備課紀錄」。\n\n"
+                            "【極嚴格禁止與撰寫指令】：\n"
+                            "1. **絕對禁止重複複製**：每一行的內容必須根據會議討論的不同主題單獨撰寫，絕對不可以把上一行的句子重複複製到下一行！\n"
+                            "2. **請嚴格將討論歸納為 2 個或 3 個不重複的項目**。\n"
+                            "3. **格式要求**：只輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），儲存格內換行使用 `<br>`，並以 1. 2. 與 a. b. 縮排展現步驟。\n\n"
+                            "【輸出結構示例】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                            "**單元：** [單元名稱]  \n"
-                            "**課題：** [課題名稱]  \n"
+                            "**單元：** [根據內容寫單元]  \n"
+                            "**課題：** [根據內容寫課題]  \n"
                             "**日期：** " + today_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
@@ -161,7 +155,7 @@ with tab1:
                             "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
                             "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
                             "  </tr>\n"
-                            "  <!-- 請整理 2 至 3 列極具層次與充實內容的 <tr> 區塊 -->\n"
+                            "  <!-- 根據逐字稿實際討論，輸出 2 至 3 列完全不重複的 <tr> -->\n"
                             "</table>\n\n"
                             "會議逐字稿內容：\n" + clean_transcript
                         )
@@ -171,18 +165,18 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位專業的香港小學數學教學專家，文字優美充實，善於設計嚴謹且具操作性的教學程序。"},
+                                    {"role": "system", "content": "你是一位香港小學數學專家。請嚴格根據輸入的逐字稿整理備課紀錄，每一行的內容必須獨立且絕不重複。"},
                                     {"role": "user", "content": prompt}
                                 ],
-                                "max_tokens": 2800,
-                                "temperature": 0.3
+                                "max_tokens": 2500,
+                                "temperature": 0.1
                             }
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.session_state["current_grade"] = selected_grade
                             st.session_state["current_year"] = selected_school_year
-                            st.toast("✅ 高質量校本紀錄生成成功！", icon="📋")
+                            st.toast("✅ 校本紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
@@ -227,7 +221,7 @@ with tab1:
                 st.success("✅ 已成功儲存！可在「📚 歷年備課紀錄庫」分頁按年度與年級查閱。")
 
 # ==========================================
-# Tab 2: 歷年備課紀錄庫（按年度/年級篩選 + 刪除功能）
+# Tab 2: 歷年備課紀錄庫
 # ==========================================
 with tab2:
     st.header("📚 歷年備課紀錄庫")
@@ -236,7 +230,6 @@ with tab2:
     if not history:
         st.info("目前尚無儲存的備課紀錄。可以在 Tab 1 生成或修訂後點擊「💾 儲存至歷年紀錄庫」。")
     else:
-        # 篩選工具列
         st.subheader("🔍 篩選與檢索")
         col_f1, col_f2 = st.columns(2)
         
@@ -286,14 +279,14 @@ with tab2:
                     st.rerun()
 
 # ==========================================
-# Tab 3: 課堂互動教材庫 (HTML5 / AI 遊戲)
+# Tab 3: 課堂互動教材庫 (適配 100% 全螢幕 HTML5 遊戲)
 # ==========================================
 with tab3:
     st.header("🎮 課堂互動教材與 AI 程式庫")
     st.write("上載同工製作或 AI 生成的 HTML5 互動教具/遊戲，老師可在課堂上即時開啟給學生遊玩。")
     
     with st.expander("➕ 上載新互動教材 (.html 檔)", expanded=False):
-        game_title = st.text_input("教材/遊戲名稱", placeholder="例如：小三分數大小比較遊戲")
+        game_title = st.text_input("教材/遊戲名稱", placeholder="例如：11-13的分解和合成(寶石屋數字對決)")
         game_grade = st.selectbox("適用年級", ["小一", "小二", "小三", "小四", "小五", "小六", "全校通用"])
         html_file = st.file_uploader("上傳單頁 HTML 檔", type=["html", "htm"])
         
@@ -328,5 +321,45 @@ with tab3:
         current_game = list(reversed(games))[selected_idx]
         
         st.markdown(f"### 🎮 當前播放：{current_game['title']}")
-        components.html(current_game["code"], height=600, scrolling=True)
+        
+        # --- 自動包裹 100% 全寬度/全高度 CSS 適配器 ---
+        responsive_wrapper = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    width: 100%;
+                    height: 100%;
+                    overflow: auto;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    background-color: #f8f9fa;
+                }}
+                /* 強制限制遊戲內容自動滿版 */
+                #game-container {{
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="game-container">
+                {current_game['code']}
+            </div>
+        </body>
+        </html>
+        """
+        
+        # 渲染 HTML5 遊戲，高度調升至 720px，寬度自適應 100%
+        components.html(responsive_wrapper, height=720, scrolling=True)
+        
         st.download_button("📥 下載此 HTML 教材原始碼", data=current_game["code"], file_name=f"{current_game['title']}.html", mime="text/html")
