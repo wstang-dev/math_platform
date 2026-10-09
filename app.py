@@ -76,7 +76,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成
+# Tab 1: 集體備課紀錄生成（錄音為主、手冊補充版）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -159,7 +159,7 @@ with tab1:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
 
-                # --- 1/2 語音轉寫 (快速切換 + 45s 超時保護) ---
+                # --- 1/2 語音轉寫 ---
                 with st.spinner("1/2 語音轉寫中（正在連線 Cloudflare Whisper 節點）..."):
                     binary_headers = {
                         "Authorization": f"Bearer {cf_api_token}", 
@@ -196,24 +196,26 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫超時") if res else "連線超時"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}。請嘗試重新點擊一次按鈕，或刷新頁面重新上傳。")
 
-                # --- 2/2 AI 融合整理 ---
+                # --- 2/2 AI 融合整理（以【會議錄音】為主，【備課手冊】為輔進行 Elaborate）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在精準提煉「平行四邊形面積」備課紀錄..."):
+                    with st.spinner("2/2 AI 正在以『會議錄音為主』進行分析與備課手冊豐富說明..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4500].replace("{", "(").replace("}", ")")
                         clean_guide = guide_text[:3500].replace("{", "(").replace("}", ")") if guide_text else "無提供手冊"
 
                         prompt = (
                             "你是一位香港資深小學數學科科主席（CDC 課程專家）。\n"
-                            "請【嚴格聚焦於『平行四邊形面積』課題】，整理出精準的「集體備課紀錄」。\n\n"
-                            "【嚴格防幻想限制規則】：\n"
-                            "1. **聚焦課題**：本次會議討論重點是「平行四邊形面積」。**絕對禁止編造七邊形、多邊形分割法、三角形或梯形面積**等未討論的課題！\n"
-                            "2. **術語與步驟**：\n"
-                            "   - 正確用語：對應底與高、高線量度（三角尺與直角邊對齊）、割補拼砌法轉換成長方形。\n"
-                            "   - 逐字稿口誤校正：將「體型」自動修訂為「梯形」（若有提及邊界觀念），將口語修正為標準數學用語。\n"
-                            "3. **格式要求**：只輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），換行統一使用 `<br>`，步驟以 1. 2. 與 a. b. 呈現。\n\n"
-                            "【參考校本備課手冊】：\n" + clean_guide + "\n\n"
-                            "【會議討論逐字稿】：\n" + clean_transcript + "\n\n"
+                            "請【以『會議討論逐字稿』為絕對主軸與骨架】，撰寫一份精準的「集體備課紀錄」。\n\n"
+                            "【極重要主從邏輯與寫作規則】：\n"
+                            "1. **錄音內容為主（主軸）**：\n"
+                            "   - 表格內的「教學重點/難點」與「討論項目」必須**完全來自【會議討論逐字稿】中老師們實際討論的內容**。\n"
+                            "   - 若錄音只討論了「平行四邊形面積」，**絕對不准**把手冊裡其他未討論的課題（如：梯形、三角形、七邊形）寫進表格！\n\n"
+                            "2. **備課手冊為輔（潤飾與 Elaborate）**：\n"
+                            "   - 【校本備課手冊】僅作為**參考與補充資料庫**。\n"
+                            "   - 當會議錄音提及某些討論點（例如：高與底的概念、使用三角尺量高、切割拼砌活動），請從【校本備課手冊】搜尋對應的**標準教學步驟（1. a. b.）、專業數學術語與資料來源頁碼**來細化與潤飾說明（Elaborate）。\n\n"
+                            "3. **格式規範**：嚴格輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），儲存格內換行統一使用 `<br>`，步驟以 1. 2. 與 a. b. 呈現。\n\n"
+                            "【第一順位：會議討論逐字稿（主軸與事實依據）】：\n" + clean_transcript + "\n\n"
+                            "【第二順位：參考校本備課手冊（僅供對照與豐富說明）】：\n" + clean_guide + "\n\n"
                             "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
                             "**單元：** 面積  \n"
@@ -227,7 +229,7 @@ with tab1:
                             "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
                             "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
                             "  </tr>\n"
-                            "  <!-- 輸出 2 至 3 列完全聚焦平行四邊形面積、精準不重複的 <tr> 區塊 -->\n"
+                            "  <!-- 根據錄音主軸，輸出 2 至 3 列完全忠於會議討論、手冊補充細節後的 <tr> 區塊 -->\n"
                             "</table>"
                         )
                         
@@ -236,7 +238,7 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位嚴謹的香港小學數學專家，只針對會議真實課題撰寫紀錄，絕不增添未提及的幾何圖形。"},
+                                    {"role": "system", "content": "你是一位聽話且嚴謹的香港小學數學專家，只記錄會議實際討論的內容，並善用備課手冊豐富教學步驟說明。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
@@ -249,7 +251,7 @@ with tab1:
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.session_state["current_grade"] = selected_grade
                             st.session_state["current_year"] = selected_school_year
-                            st.toast("✅ 高質量精準紀錄生成成功！", icon="📋")
+                            st.toast("✅ 以會議為主的精準紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
