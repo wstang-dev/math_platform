@@ -20,19 +20,13 @@ except ImportError:
     HAS_PDF = False
 
 # 頁面基本設定
-st.set_page_config(page_title="小學數學科校本 AI 輔助平台", layout="wide", page_icon="📐")
+st.set_page_config(page_title="小學數學科校本 AI 輔助平台 (OpenRouter 版)", layout="wide", page_icon="📐")
 
-# 相容讀取 Secrets 或 側邊欄輸入
+# 設定 OpenRouter API Key
 st.sidebar.header("🔑 系統設定")
-cf_account_id = (
-    st.secrets.get("CLOUDFLARE_ACCOUNT_ID") 
-    or st.secrets.get("CF_ACCOUNT_ID") 
-    or st.sidebar.text_input("Cloudflare Account ID", type="password")
-)
-cf_api_token = (
-    st.secrets.get("CLOUDFLARE_API_TOKEN") 
-    or st.secrets.get("CF_API_TOKEN") 
-    or st.sidebar.text_input("Cloudflare API Token", type="password")
+openrouter_api_key = (
+    st.secrets.get("OPENROUTER_API_KEY") 
+    or st.sidebar.text_input("OpenRouter API Key (sk-or-v1-...)", type="password")
 )
 
 # 科組老師名單
@@ -60,7 +54,7 @@ def save_data(file_path, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def clean_ai_response(text):
-    """自動清理 AI 回傳內容頭尾的 Markdown 代碼塊標記"""
+    """清理 AI 回傳內容頭尾的 Markdown 代碼塊標記"""
     if not text:
         return ""
     text = text.strip()
@@ -74,29 +68,45 @@ def clean_ai_response(text):
         text = text[:-3]
     return text.strip()
 
-def run_cf_ai(model_name, headers, payload, is_json=True, timeout=60):
-    url = f"[https://api.cloudflare.com/client/v4/accounts/](https://api.cloudflare.com/client/v4/accounts/){cf_account_id}/ai/run/{model_name}"
+def run_openrouter_ai(prompt, system_prompt, api_key):
+    """透過 OpenRouter 呼叫免費的 Llama 3.3 70B 模型"""
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.1,
+        "max_tokens": 3000
+    }
     try:
-        if is_json:
-            response = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        res_json = response.json()
+        if "choices" in res_json and len(res_json["choices"]) > 0:
+            return True, res_json["choices"][0]["message"]["content"]
         else:
-            response = requests.post(url, headers=headers, data=payload, timeout=timeout)
-        return response.json()
+            err_msg = res_json.get("error", {}).get("message", "未知錯誤")
+            return False, f"OpenRouter 回應失敗：{err_msg}"
     except Exception as e:
-        return {"success": False, "errors": [{"message": str(e)}]}
+        return False, f"連線失敗：{str(e)}"
 
-st.title("📐 小學數學科校本 AI 輔助與教材平台")
+st.title("📐 小學數學科校本 AI 輔助與教材平台 (OpenRouter 70B 旗艦版)")
 
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成
+# Tab 1: 集體備課紀錄生成 (OpenRouter Llama 3.3 70B 驅動)
 # ==========================================
 with tab1:
-    st.header("🎙️ 集體備課會議紀錄生成 (貼上逐字稿 + 備課手冊)")
+    st.header("🎙️ 集體備課會議紀錄生成 (貼上 Gemini 逐字稿 + 備課手冊)")
     
-    if not cf_account_id or not cf_api_token:
-        st.warning("⚠️ 提示：未偵測到 Cloudflare API 金鑰，請在左側邊欄 (Sidebar) 設定。")
+    if not openrouter_api_key:
+        st.warning("⚠️ 提示：請在左側邊欄 (Sidebar) 或 Secrets 設定 OPENROUTER_API_KEY。")
 
     # --- 基本資料選擇區 ---
     st.subheader("📝 會議基本資料設定")
@@ -171,8 +181,8 @@ with tab1:
     st.divider()
 
     if st.button("🚀 開始結合逐字稿與手冊生成校本紀錄", type="primary"):
-        if not cf_account_id or not cf_api_token:
-            st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
+        if not openrouter_api_key:
+            st.error("❌ 請先填寫 OpenRouter API Key！")
         elif not transcript_input.strip():
             st.error("❌ 請先在左側框貼上逐字稿內容！")
         else:
@@ -180,62 +190,57 @@ with tab1:
             recorder_str = selected_recorder
             formatted_date_str = selected_meeting_date.strftime("%d-%m-%Y")
 
-            with st.spinner("🤖 AI 正在精準整理高質量、極具具體步驟的 Point Form 表格..."):
-                clean_transcript = transcript_input[:5000].replace("{", "(").replace("}", ")")
-                clean_guide = guide_text[:3500].replace("{", "(").replace("}", ")") if guide_text else "無提供額外手冊，請純粹根據逐字稿詳細內容展開教學程序。"
+            with st.spinner("⚡ Llama 3.3 70B 高智商模型正在分析逐字稿並生成深度校本紀錄..."):
+                clean_transcript = transcript_input[:8000].replace("{", "(").replace("}", ")")
+                clean_guide = guide_text[:6000].replace("{", "(").replace("}", ")") if guide_text else "無提供額外手冊，請純粹根據逐字稿詳細內容展開教學程序。"
 
-                prompt = (
-                    "你是一位香港資深小學數學科科主席（CDC 課程專家）。\n"
-                    "請閱讀【會議逐字稿】，精準提煉老師們討論的**單一特定課題（例如：三角形的面積）**，撰寫一份高品質、條理分明且極具教導性的「集體備課紀錄」。\n\n"
-                    "【絕對禁止機械式重複！嚴格寫作限制規則】：\n"
-                    "1. **結構歸納（最多 3 至 4 行 <tr>）**：\n"
-                    "   - 切勿將每個小迷思都單獨拆成一行！請把全篇逐字稿歸納為 2 至 3 個綜合教學重點（例如：1. 觀念與底高對應、2. 面積公式與分割探究、3. 已知面積倒推計算）。\n"
-                    "2. **具體且紮實的教學程序（Point Form）**：\n"
-                    "   - **絕對禁止每一行都複製貼上相同的套話**！\n"
-                    "   - 每一列的教學程序必須**完全針對該欄位的教學難點**寫出具體解決策略。必須包含逐字稿中的具體細節（如：圈出直角符號、使用 iPad 平行四邊形分割探究、倒推計算時先乘以 2 再除以底/高、圖像化展示）。\n"
-                    "   - 步驟必須使用 `1.` `2.` `3.` 及 `a.` `b.`，且每一個小點之間必須加 `<br>` 換行！\n"
-                    "3. **資料來源**：結合備課手冊及逐字稿，寫出具體參考（如：校本備課手冊、進展工作紙、課本動畫及 iPad 探究）。\n\n"
-                    "【第一順位：會議逐字稿】：\n" + clean_transcript + "\n\n"
-                    "【第二順位：參考校本備課手冊】：\n" + clean_guide + "\n\n"
-                    "【請輸出以下 HTML 表格格式】：\n"
-                    "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                    "**單元：** [AI 自動歸納，如：面積]\n"
-                    "**課題：** [AI 自動歸納，如：三角形的面積]\n"
-                    "**日期：** " + formatted_date_str + "  \n"
-                    "**出席老師：** " + attendees_str + "  \n"
-                    "**紀錄老師：** " + recorder_str + "  \n\n"
-                    "<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>\n"
-                    "  <tr style='background-color:#f2f2f2;'>\n"
-                    "    <th style='width:30%; padding:8px;'>教學重點 / 難點</th>\n"
-                    "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
-                    "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
-                    "  </tr>\n"
-                    "  <!-- 輸出 2 至 3 列極具針對性、內容充實、含 <br> 換行的 Point Form <tr> 區塊 -->\n"
-                    "</table>"
-                )
-                
-                llm_res = run_cf_ai(
-                    "@cf/meta/llama-3.1-8b-instruct", 
-                    {"Authorization": f"Bearer {cf_api_token}"}, 
-                    payload={
-                        "messages": [
-                            {"role": "system", "content": "你是一位專業的小學數學教案專家，擅長根據會議逐字稿整理高質量、具體紮實的條列式教案，絕不輸出重複套話。"},
-                            {"role": "user", "content": prompt}
-                        ],
-                        "max_tokens": 2800,
-                        "temperature": 0.1
-                    },
-                    is_json=True,
-                    timeout=60
-                )
-                if llm_res.get("success"):
-                    raw_out = llm_res.get("result", {}).get("response", "")
+                sys_prompt = "你是一位專業的小學數學教案專家，擅長根據會議逐字稿整理高質量、具體紮實的條列式教案，絕不輸出重複套話。"
+                prompt = f"""
+你是一位香港資深小學數學科科主席（CDC 課程專家）。
+請閱讀【會議逐字稿】，精準提煉老師們討論的**單一特定課題（例如：三角形的面積）**，撰寫一份高品質、條理分明且極具教導性的「集體備課紀錄」。
+
+【絕對禁止機械式重複！嚴格寫作限制規則】：
+1. **結構歸納（最多 3 至 4 行 <tr>）**：
+   - 切勿將每個小迷思都單獨拆成一行！請把全篇逐字稿歸納為 2 至 3 個綜合教學重點（例如：1. 觀念與底高對應、2. 面積公式與分割探究、3. 已知面積倒推計算）。
+2. **具體且紮實的教學程序（Point Form）**：
+   - **絕對禁止每一行都複製貼上相同的套話**！
+   - 每一列的教學程序必須**完全針對該欄位的教學難點**寫出具體解決策略。必須包含逐字稿中的具體細節（如：圈出直角符號、使用 iPad 平行四邊形分割探究、倒推計算時先乘以 2 再除以底/高、圖像化展示）。
+   - 步驟必須使用 `1.` `2.` `3.` 及 `a.` `b.`，且每一個小點之間必須加 `<br>` 換行！
+3. **資料來源**：結合備課手冊及逐字稿，寫出具體參考（如：校本備課手冊、進展工作紙、課本動畫及 iPad 探究）。
+
+【第一順位：會議逐字稿】：
+{clean_transcript}
+
+【第二順位：參考校本備課手冊】：
+{clean_guide}
+
+【請輸出以下 HTML 表格格式】：
+### （ {selected_grade} ）年級數學科備課紀錄({selected_school_year})
+
+**單元：** [AI 自動歸納，如：面積]
+**課題：** [AI 自動歸納，如：三角形的面積]
+**日期：** {formatted_date_str}  
+**出席老師：** {attendees_str}  
+**紀錄老師：** {recorder_str}  
+
+<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>
+  <tr style='background-color:#f2f2f2;'>
+    <th style='width:30%; padding:8px;'>教學重點 / 難點</th>
+    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>
+    <th style='width:20%; padding:8px;'>資料來源</th>
+  </tr>
+  <!-- 輸出 2 至 3 列極具針對性、內容充實、含 <br> 換行的 Point Form <tr> 區塊 -->
+</table>
+"""
+
+                success, raw_out = run_openrouter_ai(prompt, sys_prompt, openrouter_api_key)
+                if success:
                     st.session_state["current_note"] = clean_ai_response(raw_out)
                     st.session_state["current_grade"] = selected_grade
                     st.session_state["current_year"] = selected_school_year
-                    st.toast("✅ 高質量備課紀錄生成成功！", icon="📋")
+                    st.toast("✅ Llama 3.3 70B 深度紀錄生成成功！", icon="⚡")
                 else:
-                    st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
+                    st.error(f"❌ 生成失敗：{raw_out}")
 
     if "current_note" in st.session_state and st.session_state["current_note"]:
         st.divider()
@@ -250,47 +255,38 @@ with tab1:
         with tab_preview:
             st.markdown(st.session_state["current_note"], unsafe_allow_html=True)
         
-        # --- 打字指令讓 AI 自動修訂表格（強化修訂邏輯）---
+        # --- 打字指令讓 AI 自動修訂表格 ---
         st.subheader("💬 打字指示 AI 自動微調修訂")
         refine_instruction = st.text_input("輸入您希望 AI 修改的指示：", placeholder="例如：請將資料來源改為工作紙 P.12，或把第三點教學程序改得更詳細。")
         
         if st.button("🤖 讓 AI 根據指示重新修訂表格", type="secondary"):
             if refine_instruction.strip():
-                with st.spinner("🤖 AI 正在修訂紀錄並更新表格..."):
-                    refine_prompt = (
-                        "你是一位香港小學數學教案專家。\n"
-                        "請根據【修改指示】，修訂並【完整重新輸出】一份最新的 Markdown / HTML 備課紀錄。\n\n"
-                        "【修改指示】：\n" + refine_instruction + "\n\n"
-                        "【原本的備課紀錄表格內容】：\n" + st.session_state["current_note"] + "\n\n"
-                        "【寫作要求】：\n"
-                        "1. 請保持相同的 3 欄 HTML <table> 結構、標題、單元與課題。\n"
-                        "2. 嚴格執行修改指示，調整相對應的教學重點、教學程序或資料來源。\n"
-                        "3. 教學程序繼續保持 Point Form 清單，小點之間使用 <br> 換行。\n"
-                        "4. 直接輸出修訂後的完整內容，嚴禁加上任何 Markdown 程式碼區塊標籤（如 ```html）或額外的引言備註。"
-                    )
-                    
-                    refine_res = run_cf_ai(
-                        "@cf/meta/llama-3.1-8b-instruct", 
-                        {"Authorization": f"Bearer {cf_api_token}"}, 
-                        payload={
-                            "messages": [
-                                {"role": "system", "content": "你是一位聽從指令的專業教案修改助理，只輸出修正後的完整教案表格。"},
-                                {"role": "user", "content": refine_prompt}
-                            ],
-                            "max_tokens": 2800,
-                            "temperature": 0.1
-                        },
-                        is_json=True,
-                        timeout=60
-                    )
-                    if refine_res.get("success"):
-                        updated_raw = refine_res.get("result", {}).get("response", "")
+                with st.spinner("⚡ AI 正在根據您的指示更新表格..."):
+                    refine_sys_prompt = "你是一位聽從指令的專業教案修改助理，只輸出修正後的完整教案表格。"
+                    refine_prompt = f"""
+你是一位香港小學數學教案專家。
+請根據【修改指示】，修訂並【完整重新輸出】一份最新的 Markdown / HTML 備課紀錄。
+
+【修改指示】：
+{refine_instruction}
+
+【原本的備課紀錄表格內容】：
+{st.session_state["current_note"]}
+
+【寫作要求】：
+1. 請保持相同的 3 欄 HTML <table> 結構、標題、單元與課題。
+2. 嚴格執行修改指示，調整相對應的教學重點、教學程序或資料來源。
+3. 教學程序繼續保持 Point Form 清單，小點之間使用 <br> 換行。
+4. 直接輸出修訂後的完整內容，嚴禁加上任何 Markdown 程式碼區塊標籤（如 ```html）或額外的引言備註。
+"""
+                    success, updated_raw = run_openrouter_ai(refine_prompt, refine_sys_prompt, openrouter_api_key)
+                    if success:
                         st.session_state["current_note"] = clean_ai_response(updated_raw)
                         st.toast("✅ 已成功根據指示修訂表格！", icon="✨")
                         time.sleep(0.5)
                         st.rerun()
                     else:
-                        st.error("❌ AI 修訂失敗，請重試。")
+                        st.error(f"❌ 微調失敗：{updated_raw}")
             else:
                 st.warning("請先輸入修改指示。")
 
@@ -437,7 +433,7 @@ with tab3:
     
     with st.expander("➕ 新增教材/遊戲網址 (Link)", expanded=False):
         link_title = st.text_input("教材/遊戲名稱", placeholder="例如：寶石屋數字對決遊戲 / GeoGebra 平行四邊形切割演示")
-        link_url = st.text_input("網址 (URL)", placeholder="例如：https://example.com/game 或 GeoGebra 連結")
+        link_url = st.text_input("網址 (URL)", placeholder="例如：[https://example.com/game](https://example.com/game) 或 GeoGebra 連結")
         link_grade = st.selectbox("適用年級", ["小一", "小二", "小三", "小四", "小五", "小六", "全校通用"])
         
         if st.button("🚀 發布教材連結", type="primary"):
