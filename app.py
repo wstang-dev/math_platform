@@ -4,13 +4,20 @@ import json
 import os
 import requests
 import time
+import io
 
-# 嘗試載入 docx 解析庫
+# 嘗試載入 docx 與 pydub 解析庫
 try:
     import docx
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
+
+try:
+    from pydub import AudioSegment
+    HAS_PYDUB = True
+except ImportError:
+    HAS_PYDUB = False
 
 # 頁面基本設定
 st.set_page_config(page_title="小學數學科校本 AI 輔助平台", layout="wide", page_icon="📐")
@@ -56,9 +63,9 @@ def run_cf_ai(model_name, headers, payload, is_binary=False):
     url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account_id}/ai/run/{model_name}"
     try:
         if is_binary:
-            response = requests.post(url, headers=headers, data=payload, timeout=120)
+            response = requests.post(url, headers=headers, data=payload, timeout=300)
         else:
-            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            response = requests.post(url, headers=headers, json=payload, timeout=300)
         return response.json()
     except Exception as e:
         return {"success": False, "errors": [{"message": str(e)}]}
@@ -68,7 +75,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（自動切片防爆版）
+# Tab 1: 集體備課紀錄生成
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -115,39 +122,44 @@ with tab1:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
 
-                # --- 1/2 語音轉寫 (大檔案自動分塊傳輸) ---
-                with st.spinner("1/2 語音轉寫中（大檔案正在進行分區段傳輸）..."):
+                # --- 1/2 語音轉寫 (極速穩定版) ---
+                with st.spinner("1/2 語音轉寫中（連線 Cloudflare Whisper 節點，請稍候）..."):
                     whisper_headers = {"Authorization": f"Bearer {cf_api_token}", "Content-Type": "application/octet-stream"}
                     model_name = "@cf/openai/whisper-large-v3-turbo"
                     
-                    # 判斷是否需要進行分塊（每塊最大 2.5 MB 確保 100% 不超出 Cloudflare 限制）
-                    CHUNK_SIZE = 2500000 
                     transcripts = []
                     
-                    if len(file_bytes) <= CHUNK_SIZE:
-                        # 小檔案直接傳輸
+                    # 檔案小於 15MB 直接全量傳送
+                    if file_size_mb <= 15 or not HAS_PYDUB:
                         res = run_cf_ai(model_name, whisper_headers, payload=file_bytes, is_binary=True)
                         if res and res.get("success"):
                             transcripts.append(res.get("result", {}).get("text", ""))
+                        else:
+                            # 備用模型
+                            res2 = run_cf_ai("@cf/openai/whisper", whisper_headers, payload=file_bytes, is_binary=True)
+                            if res2 and res2.get("success"):
+                                transcripts.append(res2.get("result", {}).get("text", ""))
                     else:
-                        # 長音訊分段切片傳輸
-                        total_chunks = (len(file_bytes) // CHUNK_SIZE) + 1
-                        st.info(f"💡 錄音檔較長，系統已自動分割為 {total_chunks} 個片段依序分析...")
-                        
-                        for i in range(total_chunks):
-                            chunk = file_bytes[i*CHUNK_SIZE : (i+1)*CHUNK_SIZE]
-                            if len(chunk) < 1000: # 過小片段跳過
-                                continue
+                        # 若有 pydub 進行標準音訊時間切割
+                        try:
+                            audio = AudioSegment.from_file(io.BytesIO(file_bytes))
+                            chunk_length_ms = 5 * 60 * 1000 # 5 分鐘一段
+                            chunks = [audio[i:i + chunk_length_ms] for i in range(0, len(audio), chunk_length_ms)]
                             
-                            st.text(f"⏳ 正在分析第 {i+1}/{total_chunks} 片段...")
-                            res = run_cf_ai(model_name, whisper_headers, payload=chunk, is_binary=True)
-                            
+                            st.info(f"💡 錄音長度約 {len(audio)//60000} 分鐘，已自動優化分段發送...")
+                            for i, chunk in enumerate(chunks):
+                                out = io.BytesIO()
+                                chunk.export(out, format="mp3")
+                                st.text(f"⏳ 分析第 {i+1}/{len(chunks)} 段...")
+                                res = run_cf_ai(model_name, whisper_headers, payload=out.getvalue(), is_binary=True)
+                                if res and res.get("success"):
+                                    transcripts.append(res.get("result", {}).get("text", ""))
+                                time.sleep(1)
+                        except Exception as ex:
+                            # 切割失敗退回直傳
+                            res = run_cf_ai(model_name, whisper_headers, payload=file_bytes, is_binary=True)
                             if res and res.get("success"):
-                                chunk_text = res.get("result", {}).get("text", "")
-                                transcripts.append(chunk_text)
-                            else:
-                                st.warning(f"⚠️ 第 {i+1} 片段分析超時，已跳過該段繼續組合...")
-                            time.sleep(1)
+                                transcripts.append(res.get("result", {}).get("text", ""))
 
                     full_text = " ".join(transcripts).strip()
 
@@ -155,7 +167,8 @@ with tab1:
                         st.session_state["transcript_text"] = full_text
                         st.toast("✅ 語音轉寫全部完成！", icon="🎙️")
                     else:
-                        st.error("❌ 語音轉寫失敗：檔案過大或連線超時。請嘗試使用在「歷年備課紀錄庫」上載 Word 檔或剪短音檔。")
+                        st.error("❌ 語音轉寫失敗：Cloudflare 伺服器連線超時。")
+                        st.info("💡 建議處理解決方式：\n1. 直接使用「📚 歷年備課紀錄庫」上載已有的 Word (.docx) 檔歸檔。\n2. 將音訊剪輯為 10 分鐘以內後重新上傳。")
 
                 # --- 2/2 AI 整理校本表格（專業術語修訂）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
