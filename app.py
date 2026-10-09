@@ -60,7 +60,7 @@ def save_data(file_path, data):
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-def run_cf_ai(model_name, headers, payload, is_json=True, timeout=180):
+def run_cf_ai(model_name, headers, payload, is_json=True, timeout=45):
     url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account_id}/ai/run/{model_name}"
     try:
         if is_json:
@@ -159,7 +159,7 @@ with tab1:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
 
-                # --- 1/2 語音轉寫 (防失真高穩定版) ---
+                # --- 1/2 語音轉寫 (快速切換 + 45s 超時保護) ---
                 with st.spinner("1/2 語音轉寫中（正在連線 Cloudflare Whisper 節點）..."):
                     binary_headers = {
                         "Authorization": f"Bearer {cf_api_token}", 
@@ -176,18 +176,16 @@ with tab1:
                     ]
                     
                     res = None
-                    # 優先以原生 Octet-stream 傳送
                     for m in models:
-                        res = run_cf_ai(m, binary_headers, payload=file_bytes, is_json=False)
+                        res = run_cf_ai(m, binary_headers, payload=file_bytes, is_json=False, timeout=45)
                         if res and res.get("success"):
                             break
-                        time.sleep(1)
+                        time.sleep(0.5)
                     
-                    # 備用 Base64 JSON 傳送通道
                     if not (res and res.get("success")):
                         try:
                             audio_b64 = base64.b64encode(file_bytes).decode("utf-8")
-                            res = run_cf_ai("@cf/openai/whisper-large-v3-turbo", json_headers, payload={"audio": audio_b64}, is_json=True)
+                            res = run_cf_ai("@cf/openai/whisper-large-v3-turbo", json_headers, payload={"audio": audio_b64}, is_json=True, timeout=45)
                         except:
                             pass
 
@@ -195,8 +193,8 @@ with tab1:
                         st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
                         st.toast("✅ 語音轉寫成功！", icon="🎙️")
                     else:
-                        err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
-                        st.error(f"❌ 語音转寫失敗：{err_msg}。請稍微重新上傳檔案後再試一次。")
+                        err_msg = res.get("errors", [{}])[0].get("message", "轉寫超時") if res else "連線超時"
+                        st.error(f"❌ 語音轉寫失敗：{err_msg}。請嘗試重新點擊一次按鈕，或刷新頁面重新上傳。")
 
                 # --- 2/2 AI 融合整理 ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
@@ -244,7 +242,8 @@ with tab1:
                                 "max_tokens": 2500,
                                 "temperature": 0.1
                             },
-                            is_json=True
+                            is_json=True,
+                            timeout=60
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
@@ -272,7 +271,7 @@ with tab1:
         with tab_preview:
             st.markdown(st.session_state["current_note"], unsafe_allow_html=True)
         
-        # --- 新增功能：打字指令讓 AI 自動修訂表格 ---
+        # --- 打字指令讓 AI 自動修訂表格 ---
         st.subheader("💬 打字指示 AI 自動微調修訂")
         st.caption("例如輸入：「請刪除梯形和三角形部分，只保留平行四邊形面積」或「把資料來源統一改為校本工作紙 P.10-15」")
         
@@ -300,7 +299,8 @@ with tab1:
                             "max_tokens": 2500,
                             "temperature": 0.1
                         },
-                        is_json=True
+                        is_json=True,
+                        timeout=60
                     )
                     if refine_res.get("success"):
                         st.session_state["current_note"] = refine_res.get("result", {}).get("response", "")
