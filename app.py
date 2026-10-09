@@ -21,6 +21,13 @@ cf_api_token = (
     or st.sidebar.text_input("Cloudflare API Token", type="password")
 )
 
+# 科組老師名單
+TEACHERS_LIST = [
+    "鄧慧姍", "陳月娥", "朱嘉欣", "韓斐", "黃群英", 
+    "梁倩玉", "容佩誼", "鄭棋昌", "李嘉琪", "林莉雅", 
+    "陳詩雅", "陳岍柔", "陳愷彤", "廖心妍"
+]
+
 # 歷史紀錄檔案路徑
 HISTORY_FILE = "meeting_notes_history.json"
 GAMES_FILE = "interactive_games.json"
@@ -54,13 +61,31 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（修復主題與表格錯位）
+# Tab 1: 集體備課紀錄生成（支援點選出席/紀錄老師）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
     
     if not cf_account_id or not cf_api_token:
         st.warning("⚠️ 提示：未偵測到 Cloudflare API 金鑰，請在左側邊欄 (Sidebar) 設定。")
+
+    # --- 新增：老師名單勾選區 ---
+    st.subheader("📝 會議基本資料與出席名單")
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        selected_attendees = st.multiselect(
+            "👥 請勾選出席老師：", 
+            options=TEACHERS_LIST,
+            default=TEACHERS_LIST[:3]  # 預設勾選前三位
+        )
+    with col_t2:
+        selected_recorder = st.selectbox(
+            "✍️ 請選擇紀錄老師：", 
+            options=TEACHERS_LIST,
+            index=0
+        )
+
+    st.divider()
 
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
@@ -69,6 +94,9 @@ with tab1:
             if not cf_account_id or not cf_api_token:
                 st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
             else:
+                attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
+                recorder_str = selected_recorder
+
                 # --- 1/2 語音轉寫 ---
                 with st.spinner("1/2 語音轉寫中（使用 Whisper 模型）..."):
                     file_bytes = audio_file.getvalue()
@@ -87,7 +115,7 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                # --- 2/2 AI 整理校本表格（忠於逐字稿真實內容）---
+                # --- 2/2 AI 整理校本表格（注入已點選的老師名單）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
                     with st.spinner("2/2 AI 正在分析會議逐字稿內容，生成專屬校本紀錄..."):
                         today_str = datetime.now().strftime("%Y-%m-%d")
@@ -97,17 +125,20 @@ with tab1:
                             "你是一位香港資深小學數學科科主席。\n"
                             "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份符合香港小學數學科格式的「集體備課紀錄」。\n\n"
                             "【極重要核心原則】：\n"
-                            "1. **絕對忠於逐字稿**：會議討論什麼課題（如平行四邊形面積），紀錄標題、單元與課題就必須如實記錄！嚴禁捏造或帶入無關的課題（如長方體）。\n"
-                            "2. **標準 Markdown 表格**：必須輸出乾淨合規的 Markdown 表格，絕對禁止出現 `<br>`、`<p>` 或多餘的 `||||` 符號。\n"
-                            "3. **內容深入且專業**：根據逐字稿擴充具體的教學步驟（如割補法、剪拼操作、底高對應）、學生常見迷思（如斜邊當成高）與建議。\n"
-                            "4. **專業用語校正**：將逐字稿中的廣東話口語及轉寫錯別字，修正為香港小學數學科專業術語。\n\n"
+                            "1. **絕對忠於逐字稿內容**：會議討論什麼課題，紀錄標題、單元與課題就必須如實記錄！嚴禁捏造無關課題。\n"
+                            "2. **老師名單設定**：\n"
+                            "   - 出席老師請務必寫為：`" + attendees_str + "`\n"
+                            "   - 紀錄老師請務必寫為：`" + recorder_str + "`\n"
+                            "3. **標準 Markdown 表格**：必須輸出乾淨合規的 Markdown 表格，絕對禁止出現 `<br>`、`<p>` 或多餘的 `||||` 符號。\n"
+                            "4. **內容深入且專業**：根據逐字稿擴充具體的教學步驟（如割補法、剪拼操作、底高對應）、學生常見迷思與建議。\n"
+                            "5. **專業用語校正**：將逐字稿中的廣東話口語及轉寫錯別字，修正為香港小學數學科專業術語。\n\n"
                             "【輸出格式模板】：\n"
                             "### （  ）年級數學科備課紀錄 (2025-2026)\n\n"
                             "**單元：** [請根據逐字稿填寫]\n"
                             "**課題：** [請根據逐字稿填寫]\n"
                             "**日期：** " + today_str + "\n"
-                            "**出席老師：** [根據逐字稿]\n"
-                            "**紀錄老師：** [根據逐字稿]\n\n"
+                            "**出席老師：** " + attendees_str + "\n"
+                            "**紀錄老師：** " + recorder_str + "\n\n"
                             "| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 | 檢討及建議 | 備註 |\n"
                             "| :--- | :--- | :--- | :--- | :--- |\n"
                             "| 1. [針對該課題的核心重點與學生迷思] | 1. [具體教學程序 a. b. c.] | [教科書/工作紙/教具] | 1. [課堂評估與檢討] | [注意事項與分工] |\n"
