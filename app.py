@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, date
 import json
 import os
 import requests
@@ -76,7 +76,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（全數學課題通用 + 廣東話優化版）
+# Tab 1: 集體備課紀錄生成
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -86,11 +86,14 @@ with tab1:
 
     # --- 基本資料選擇區 ---
     st.subheader("📝 會議基本資料設定")
-    col_g1, col_g2 = st.columns(2)
+    col_g1, col_g2, col_g3 = st.columns(3)
     with col_g1:
         selected_grade = st.selectbox("📌 請選擇年級：", ["一", "二", "三", "四", "五", "六"], index=3)
     with col_g2:
         selected_school_year = st.selectbox("📅 請選擇學年：", ["2025-2026", "2026-2027"], index=1)
+    with col_g3:
+        # ✨ 新增：自訂會議日期選擇器
+        selected_meeting_date = st.date_input("🗓️ 請選擇會議日期：", value=date.today())
 
     col_t1, col_t2 = st.columns(2)
     with col_t1:
@@ -158,6 +161,8 @@ with tab1:
             else:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
+                # 轉成 DD-MM-YYYY 格式字串
+                formatted_date_str = selected_meeting_date.strftime("%d-%m-%Y")
 
                 # --- 1/3 廣東話優化 Whisper 轉寫 ---
                 with st.spinner("1/3 廣東話語音轉寫中（注入香港小學數學專用術語詞庫）..."):
@@ -181,7 +186,7 @@ with tab1:
                     with st.spinner("2/3 AI 正在修正廣東話口語與同音錯字..."):
                         fix_prompt = (
                             "你是一位廣東話與香港小學數學課程（CDC）專家。\n"
-                            "請將以下廣東話備課會議逐字稿，修正為語意通順、專業術語正確（自動校正同音錯字，如：體型->梯形、周界->邊長、通分母、分子、代數、百分率等）的標準繁體中文逐字稿。\n"
+                            "請將以下廣東話備課會議逐字稿，修正為語意通順、專業術語正確的標準繁體中文逐字稿。\n"
                             "【原始逐字稿】：\n" + st.session_state["raw_transcript"][:4000]
                         )
                         
@@ -204,29 +209,26 @@ with tab1:
                         else:
                             st.session_state["transcript_text"] = st.session_state["raw_transcript"]
 
-                # --- 3/3 AI 融合整理生成表格 (動態辨識全數學課題) ---
+                # --- 3/3 AI 融合整理生成表格 (使用自訂日期) ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
                     with st.spinner("3/3 AI 正在動態辨識會議課題並提煉校本備課紀錄..."):
-                        today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4500].replace("{", "(").replace("}", ")")
                         clean_guide = guide_text[:3500].replace("{", "(").replace("}", ")") if guide_text else "無提供手冊"
 
                         prompt = (
                             "你是一位香港資深小學數學科科主席（CDC 課程專家）。\n"
-                            "請閱讀【會議討論內容】，【自動辨識並歸納】老師們今天討論的數學單元與課題（可以是數、圖形與空間、度量、代數、數據處理等任何小學課題）。\n\n"
+                            "請閱讀【會議討論內容】，【自動辨識並歸納】老師們今天討論的數學單元與課題。\n\n"
                             "【嚴格寫作限制規則】：\n"
-                            "1. **動態課題與完全忠於會議**：\n"
-                            "   - 單元與課題名稱必須根據【會議討論內容】自動歸納（如：異分母分數加法、平行四邊形面積、簡易方程、百分數等）。\n"
-                            "   - 表格內的「教學重點/難點」與「討論項目」必須**完全來自會議內容**，**絕對禁止編造或強加**會議中完全沒有提及的其他幾何圖形或數學課題！\n"
-                            "2. **手冊為輔（Elaborate）**：當會議提及某教學活動或學生迷思，請從【校本備課手冊】中尋找對應該課題的標準教學步驟（1. a. b.）、專業術語與課本/工作紙頁碼補充說明（Elaborate）。\n"
-                            "3. **格式規範**：嚴格輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），儲存格內換行統一使用 `<br>`，步驟以 1. 2. 與 a. b. 呈現。\n\n"
-                            "【第一順位：修正後的會議討論逐字稿（事實依據）】：\n" + clean_transcript + "\n\n"
-                            "【第二順位：參考校本備課手冊（僅供對照與豐富說明）】：\n" + clean_guide + "\n\n"
+                            "1. **動態課題與完全忠於會議**：單元與課題名稱必須根據【會議討論內容】自動歸納，表格內容必須**完全來自會議內容**，絕對禁止編造無關課題！\n"
+                            "2. **手冊為輔（Elaborate）**：請從【校本備課手冊】尋找對應該課題的標準教學步驟（1. a. b.）、專業術語與課本/工作紙頁碼補充說明（Elaborate）。\n"
+                            "3. **格式規範**：嚴格輸出 3 個 Column 的 HTML `<table>` 表格，儲存格內換行統一使用 `<br>`，步驟以 1. 2. 與 a. b. 呈現。\n\n"
+                            "【第一順位：修正後的會議討論逐字稿】：\n" + clean_transcript + "\n\n"
+                            "【第二順位：參考校本備課手冊】：\n" + clean_guide + "\n\n"
                             "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                            "**單元：** [AI 根據會議內容自動歸納，例如：分數 / 面積 / 方程]\n"
-                            "**課題：** [AI 根據會議內容自動歸納，例如：異分母分數加法 / 平行四邊形面積]\n"
-                            "**日期：** " + today_str + "  \n"
+                            "**單元：** [AI 根據會議內容自動歸納]\n"
+                            "**課題：** [AI 根據會議內容自動歸納]\n"
+                            "**日期：** " + formatted_date_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
                             "<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>\n"
@@ -282,7 +284,7 @@ with tab1:
         
         # --- 打字指令讓 AI 自動修訂表格 ---
         st.subheader("💬 打字指示 AI 自動微調修訂")
-        refine_instruction = st.text_input("輸入您希望 AI 修改的指示：", placeholder="例如：請將資料來源改為校本工作紙 P.5，並增加迷思概念釐清步驟。")
+        refine_instruction = st.text_input("輸入您希望 AI 修改的指示：", placeholder="例如：請將日期改為 15-10-2026，並增加迷思概念釐清步驟。")
         
         if st.button("🤖 讓 AI 根據指示重新修訂表格", type="secondary"):
             if refine_instruction:
@@ -326,7 +328,7 @@ with tab1:
             st.download_button(
                 "📥 下載備課紀錄 (.md)", 
                 data=st.session_state["current_note"], 
-                file_name=f"備課紀錄_{datetime.now().strftime('%Y%m%d')}.md", 
+                file_name=f"備課紀錄_{selected_meeting_date.strftime('%Y%m%d')}.md", 
                 mime="text/markdown"
             )
         with col2:
@@ -336,8 +338,8 @@ with tab1:
                     "id": int(time.time()),
                     "year": st.session_state.get("current_year", selected_school_year),
                     "grade": f"{st.session_state.get('current_grade', selected_grade)}年級",
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "title": f"（{st.session_state.get('current_grade', selected_grade)}）年級備課紀錄 ({st.session_state.get('current_year', selected_school_year)})",
+                    "date": selected_meeting_date.strftime("%Y-%m-%d"),
+                    "title": f"（{st.session_state.get('current_grade', selected_grade)}）年級備課紀錄 ({st.session_state.get('current_year', selected_school_year)}) - {selected_meeting_date.strftime('%d/%m/%Y')}",
                     "content": st.session_state["current_note"]
                 })
                 save_data(HISTORY_FILE, history)
@@ -390,7 +392,7 @@ with tab2:
                         "id": int(time.time()),
                         "year": up_year,
                         "grade": up_grade,
-                        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "date": datetime.now().strftime("%Y-%m-%d"),
                         "title": f"（{up_grade}）匯入備課紀錄 ({up_year}) - {up_file.name}",
                         "content": file_text
                     })
@@ -405,4 +407,126 @@ with tab2:
     if not history:
         st.info("目前尚無儲存的備課紀錄。可以在上方匯入 Word 檔，或在 Tab 1 生成紀錄。")
     else:
-        st.subheader("🔍 篩
+        st.subheader("🔍 篩選與檢索")
+        col_f1, col_f2 = st.columns(2)
+        
+        available_years = ["全部學年"] + sorted(list(set([item.get("year", "未知學年") for item in history])), reverse=True)
+        available_grades = ["全部年級"] + sorted(list(set([item.get("grade", "未知年級") for item in history])))
+        
+        with col_f1:
+            filter_year = st.selectbox("📅 依學年篩選：", available_years)
+        with col_f2:
+            filter_grade = st.selectbox("📌 依年級篩選：", available_grades)
+            
+        filtered_history = history
+        if filter_year != "全部學年":
+            filtered_history = [item for item in filtered_history if item.get("year") == filter_year]
+        if filter_grade != "全部年級":
+            filtered_history = [item for item in filtered_history if item.get("grade") == filter_grade]
+            
+        st.divider()
+        
+        if not filtered_history:
+            st.warning("⚠️ 沒有符合條件的備課紀錄。")
+        else:
+            titles_map = {
+                f"[{item.get('year', '')}][{item.get('grade', '')}] {item['date']} - {item['title']}": item
+                for item in reversed(filtered_history)
+            }
+            
+            selected_title = st.selectbox("請選擇要查閱或管理的備課紀錄：", list(titles_map.keys()))
+            selected_item = titles_map[selected_title]
+            
+            st.markdown(selected_item["content"], unsafe_allow_html=True)
+            
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                st.download_button(
+                    "📥 下載此紀錄 (.md)", 
+                    data=selected_item["content"], 
+                    file_name=f"{selected_item['title']}.md", 
+                    mime="text/markdown"
+                )
+            with col_d2:
+                if st.button(f"🗑️ 刪除這筆紀錄 ({selected_item['date']})", type="secondary"):
+                    updated_history = [h for h in history if h.get("id") != selected_item.get("id")]
+                    save_data(HISTORY_FILE, updated_history)
+                    st.success("🗑️ 該紀錄已成功刪除！")
+                    time.sleep(1)
+                    st.rerun()
+
+# ==========================================
+# Tab 3: 課堂互動教材庫 (純 Link 連結版)
+# ==========================================
+with tab3:
+    st.header("🔗 課堂互動教材與外部資源連結庫")
+    st.write("同工可在此新增 GeoGebra、Wordwall 或各類課堂互動遊戲的網址 (Link)，點擊按鈕即可於新分頁開啟！")
+    
+    with st.expander("➕ 新增教材/遊戲網址 (Link)", expanded=False):
+        link_title = st.text_input("教材/遊戲名稱", placeholder="例如：寶石屋數字對決遊戲 / GeoGebra 平行四邊形切割演示")
+        link_url = st.text_input("網址 (URL)", placeholder="例如：https://example.com/game 或 GeoGebra 連結")
+        link_grade = st.selectbox("適用年級", ["小一", "小二", "小三", "小四", "小五", "小六", "全校通用"])
+        
+        if st.button("🚀 發布教材連結", type="primary"):
+            if link_title and link_url:
+                if not (link_url.startswith("http://") or link_url.startswith("https://")):
+                    link_url = "https://" + link_url
+                
+                games = load_data(GAMES_FILE)
+                games.append({
+                    "id": int(time.time()),
+                    "title": link_title,
+                    "url": link_url,
+                    "grade": link_grade,
+                    "date": datetime.now().strftime("%Y-%m-%d")
+                })
+                save_data(GAMES_FILE, games)
+                st.success(f"✅ 教材連結「{link_title}」已成功新增！")
+                st.rerun()
+            else:
+                st.warning("請填寫教材名稱與完整網址。")
+                
+    st.divider()
+    
+    games = load_data(GAMES_FILE)
+    if not games:
+        st.info("💡 目前教材庫尚無連結，點擊上方「新增教材/遊戲網址 (Link)」來建立第一個連結吧！")
+    else:
+        st.subheader("🎯 選擇課堂教材並開啟連結")
+        
+        grade_filter = st.selectbox("依年級篩選教材：", ["全校通用/全部", "小一", "小二", "小三", "小四", "小五", "小六"])
+        
+        filtered_games = games
+        if grade_filter != "全校通用/全部":
+            filtered_games = [g for g in games if g.get("grade") == grade_filter or g.get("grade") == "全校通用"]
+            
+        if not filtered_games:
+            st.warning("沒有此年級的教材連結。")
+        else:
+            for idx, g in enumerate(reversed(filtered_games)):
+                col_m1, col_m2, col_m3 = st.columns([3, 2, 1])
+                with col_m1:
+                    st.markdown(f"**[{g.get('grade', '通用')}] {g['title']}**")
+                    st.caption(f"新增日期：{g.get('date', '')} | 網址：{g.get('url', '')}")
+                with col_m2:
+                    target_url = g.get('url', '#')
+                    st.markdown(
+                        f'''<a href="{target_url}" target="_blank" style="
+                            display: inline-block;
+                            padding: 8px 16px;
+                            background-color: #FF4B4B;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 6px;
+                            font-weight: bold;
+                        ">🔗 在新分頁開啟教材</a>''', 
+                        unsafe_allow_html=True
+                    )
+                with col_m3:
+                    if st.button("🗑️ 刪除", key=f"del_link_{g['id']}"):
+                        updated_games = [item for item in games if item.get("id") != g.get("id")]
+                        save_data(GAMES_FILE, updated_games)
+                        st.success("已刪除該連結！")
+                        time.sleep(0.5)
+                        st.rerun()
+                st.divider()
