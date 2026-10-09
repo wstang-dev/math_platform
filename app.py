@@ -76,7 +76,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成 (極致 Point Form 防段落版)
+# Tab 1: 集體備課紀錄生成 (單一小課精準聚焦版)
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -207,31 +207,28 @@ with tab1:
                         else:
                             st.session_state["transcript_text"] = st.session_state["raw_transcript"]
 
-                # --- 3/3 AI 融合整理生成表格 (硬性 Point Form 格式限制) ---
+                # --- 3/3 AI 融合整理生成表格 (限定單一小課，嚴禁放大為整個單元) ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("3/3 AI 正在以『Point Form 清單格式』提煉校本備課紀錄..."):
+                    with st.spinner("3/3 AI 正在將範圍精準收窄至『錄音討論的單一小課』..."):
                         clean_transcript = st.session_state["transcript_text"][:4500].replace("{", "(").replace("}", ")")
                         clean_guide = guide_text[:3500].replace("{", "(").replace("}", ")") if guide_text else "無提供手冊"
 
                         prompt = (
                             "你是一位香港資深小學數學科科主席（CDC 課程專家）。\n"
-                            "請閱讀【會議討論內容】，【自動辨識】老師們今天討論的數學單元與課題。\n\n"
-                            "【極嚴格 Point Form 與邊界限制】：\n"
-                            "1. **完全忠於錄音事實**：\n"
-                            "   - 單元與課題名稱必須完全依據【會議討論內容】歸納。\n"
-                            "   - 表格內容必須來自【會議討論內容】中老師們實際討論的細節。**嚴禁強加會議中完全沒提及的課題**！\n"
+                            "請特別注意：老師們這節會議**只討論了單元中的『某一個特定小課（Single Lesson）』**，請絕對不要把整冊手冊的其他小課寫進來！\n\n"
+                            "【極嚴格單一小課與 Point Form 限制】：\n"
+                            "1. **精準收窄至單一小課**：\n"
+                            "   - 課題名稱必須極度精準（例如：『平行四邊形面積』或『異分母分數加法』）。\n"
+                            "   - 表格內容必須**100% 嚴格限定於錄音中討論的那一小課**。手冊中屬於該單元但**會議沒討論的其他小課（例如：梯形面積、三角形面積、分母通分等），必須徹底過濾排除！**\n"
                             "2. **強制使用 Point Form（條列式清單）**：\n"
-                            "   - 「教學程序 / 解決方法」欄位**絕對禁止寫成大段落長文**！\n"
-                            "   - 必須嚴格使用 `1.` `2.` `3.` 與 `a.` `b.` 清單格式，並且**每一個小點之間必須加入 `<br>` 換行**！\n"
-                            "   - 格式範例：\n"
-                            "     1. 老師展示 GeoGebra 動態圖形，引導學生觀察底與高的關係。<br>2. 學生進行分組探究：<br>&nbsp;&nbsp;a. 使用三角尺量度直角與高的長度。<br>&nbsp;&nbsp;b. 進行割補拼砌法轉換成已知圖形。<br>3. 運用進展性工作紙釐清對應底高概念。\n"
-                            "3. **手冊為輔（Elaborate）**：請從【校本備課手冊】尋找對應該課題的標準步驟與頁碼補充在 Point Form 中。\n\n"
-                            "【第一順位：修正後的會議討論逐字稿】：\n" + clean_transcript + "\n\n"
-                            "【第二順位：參考校本備課手冊】：\n" + clean_guide + "\n\n"
+                            "   - 「教學程序 / 解決方法」欄位必須使用 `1.` `2.` `3.` 與 `a.` `b.` 清單格式，並且**每一個小點之間必須加入 `<br>` 換行**！嚴禁段落式長文！\n"
+                            "3. **手冊為輔（Elaborate）**：只選取手冊中**與錄音小課完全吻合**的頁數與標準教學步驟補充在 Point Form 中。\n\n"
+                            "【第一順位：會議討論逐字稿（唯一事實範圍）】：\n" + clean_transcript + "\n\n"
+                            "【第二順位：參考校本備課手冊（僅供對照該小課細節）】：\n" + clean_guide + "\n\n"
                             "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                            "**單元：** [AI 自動歸納，如：面積]\n"
-                            "**課題：** [AI 自動歸納，如：平行四邊形面積]\n"
+                            "**單元：** [AI 自動歸納大單元，如：面積]\n"
+                            "**課題：** [AI 精準歸納錄音討論的單一小課，如：平行四邊形面積]\n"
                             "**日期：** " + formatted_date_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
@@ -241,7 +238,7 @@ with tab1:
                             "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
                             "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
                             "  </tr>\n"
-                            "  <!-- 輸出 2 至 3 列完全為 Point Form 清單格式且有 <br> 換行的 <tr> 區塊 -->\n"
+                            "  <!-- 輸出 2 至 3 列完全侷限於該單一小課、Point Form 格式且有 <br> 換行的 <tr> 區塊 -->\n"
                             "</table>"
                         )
                         
@@ -250,7 +247,7 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位嚴謹的香港小學數學專家，習慣使用條列式（Point Form）撰寫結構化教案。"},
+                                    {"role": "system", "content": "你是一位嚴謹的香港小學數學專家，專門針對單一小課撰寫精準的 Point Form 備課紀錄。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
@@ -263,7 +260,7 @@ with tab1:
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.session_state["current_grade"] = selected_grade
                             st.session_state["current_year"] = selected_school_year
-                            st.toast("✅ 高質量 Point Form 紀錄生成成功！", icon="📋")
+                            st.toast("✅ 精準單一小課 Point Form 紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
@@ -288,7 +285,7 @@ with tab1:
         
         # --- 打字指令讓 AI 自動修訂表格 ---
         st.subheader("💬 打字指示 AI 自動微調修訂")
-        refine_instruction = st.text_input("輸入您希望 AI 修改的指示：", placeholder="例如：請全部改為 Point Form 點陣，並將資料來源改為校本工作紙 P.5。")
+        refine_instruction = st.text_input("輸入您希望 AI 修改的指示：", placeholder="例如：只要平行四邊形面積這一課，請刪除梯形和三角形部分。")
         
         if st.button("🤖 讓 AI 根據指示重新修訂表格", type="secondary"):
             if refine_instruction:
