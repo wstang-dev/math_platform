@@ -64,12 +64,13 @@ with tab1:
 
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
+    # 1. 處理按鈕點擊與 AI 呼叫
     if audio_file:
         if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
             if not cf_account_id or not cf_api_token:
                 st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
             else:
-                # --- 1. 語音轉寫 ---
+                # --- 1/2 語音轉寫 ---
                 with st.spinner("1/2 語音轉寫中（使用 Whisper 模型）..."):
                     file_bytes = audio_file.getvalue()
                     whisper_headers = {"Authorization": f"Bearer {cf_api_token}", "Content-Type": "application/octet-stream"}
@@ -83,12 +84,12 @@ with tab1:
                     
                     if res and res.get("success"):
                         st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
-                        st.success("✅ 語音轉寫完成！")
+                        st.toast("✅ 語音轉寫完成！", icon="🎙️")
                     else:
                         err_msg = res.get("errors", [{}])[0].get("message", "語音轉寫服務繁忙") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                # --- 2. AI 整理校本表格 ---
+                # --- 2/2 AI 整理校本表格 ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
                     with st.spinner("2/2 AI 生成校本格式備課紀錄..."):
                         today_str = datetime.now().strftime("%Y-%m-%d")
@@ -112,6 +113,45 @@ with tab1:
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
-                            st.success("✅ 校本紀錄生成成功！")
+                            st.toast("✅ 校本紀錄生成成功！", icon="📋")
                         else:
-                            st
+                            st.error("❌ AI 生成紀錄失敗，請稍後重試。")
+
+    # 2. 獨立展示區：只要 Session State 裡有資料就必定繪製渲染到畫面上
+    if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
+        with st.expander("📄 點擊展開 / 隱藏「會議完整逐字稿」", expanded=False):
+            st.text_area("逐字稿內容", value=st.session_state["transcript_text"], height=180)
+
+    if "current_note" in st.session_state and st.session_state["current_note"]:
+        st.divider()
+        st.subheader("📋 集體備課紀錄預覽與手動修訂")
+        
+        # 預覽與編輯雙 Tab 頁面
+        tab_preview, tab_edit = st.tabs(["👁️ 預覽校本表格", "✏️ 編輯與修正錯字"])
+        
+        with tab_edit:
+            edited_note = st.text_area("Markdown 內容編輯區", value=st.session_state["current_note"], height=350)
+            st.session_state["current_note"] = edited_note
+            
+        with tab_preview:
+            st.markdown(st.session_state["current_note"])
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "📥 下載備課紀錄 (.md)", 
+                data=st.session_state["current_note"], 
+                file_name=f"備課紀錄_{datetime.now().strftime('%Y%m%d')}.md", 
+                mime="text/markdown"
+            )
+        with col2:
+            if st.button("💾 儲存至歷年紀錄庫", type="primary"):
+                history = load_data(HISTORY_FILE)
+                history.append({
+                    "id": len(history) + 1,
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "title": f"數學備課紀錄 ({datetime.now().strftime('%Y-%m-%d')})",
+                    "content": st.session_state["current_note"]
+                })
+                save_data(HISTORY_FILE, history)
+                st.success("✅ 已成功儲存！可在「📚 歷年備課紀錄庫」查閱。")
