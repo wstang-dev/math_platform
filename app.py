@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import os
 import requests
+import time
 import streamlit.components.v1 as components
 
 # 頁面基本設定
@@ -61,7 +62,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（HTML 100% 穩定表格版）
+# Tab 1: 集體備課紀錄生成（HTML 100% 穩定表格 + Whisper 多重重試版）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -103,25 +104,32 @@ with tab1:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
 
-                # --- 1/2 語音轉寫 ---
-                with st.spinner("1/2 語音轉寫中（使用 Whisper 模型）..."):
+                # --- 1/2 語音轉寫 (含自動重試機制) ---
+                with st.spinner("1/2 語音轉寫中（正在連線 Cloudflare Whisper 節點）..."):
                     file_bytes = audio_file.getvalue()
                     whisper_headers = {"Authorization": f"Bearer {cf_api_token}", "Content-Type": "application/octet-stream"}
                     
-                    models = ["@cf/openai/whisper-large-v3-turbo", "@cf/openai/whisper"]
+                    models = [
+                        "@cf/openai/whisper-large-v3-turbo", 
+                        "@cf/openai/whisper",
+                        "@cf/openai/whisper-large-v3-turbo" # 再次重試
+                    ]
+                    
                     res = None
-                    for m in models:
+                    for attempt, m in enumerate(models):
                         res = run_cf_ai(m, whisper_headers, payload=file_bytes, is_binary=True)
-                        if res and res.get("success"): break
+                        if res and res.get("success"):
+                            break
+                        time.sleep(1.5) # 稍微等待後進行重試
                     
                     if res and res.get("success"):
                         st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
                         st.toast("✅ 語音轉寫完成！", icon="🎙️")
                     else:
-                        err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
-                        st.error(f"❌ 語音轉寫失敗：{err_msg}")
+                        err_msg = res.get("errors", [{}])[0].get("message", "Cloudflare 語音服務繁忙") if res else "連線失敗"
+                        st.error(f"❌ 語音轉寫失敗：{err_msg}。請稍等 5 秒後重新點擊「🚀 開始分析錄音」。")
 
-                # --- 2/2 AI 整理校本表格（採用 HTML Table 結構，徹底告別破版）---
+                # --- 2/2 AI 整理校本表格 ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
                     with st.spinner("2/2 AI 正在分析會議內容，生成 3 欄 HTML 完美表格..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
@@ -131,7 +139,7 @@ with tab1:
                             "你是一位香港資深小學數學科科主席。\n"
                             "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份結構清晰的「小學數學科集體備課紀錄」。\n\n"
                             "【極嚴格輸出格式指示】：\n"
-                            "1. **不輸出校名**。\n"
+                            "1. **絕對不輸出校名**。\n"
                             "2. **表格必須使用 HTML <table> 語法**，結構如下：\n"
                             "   <table border='1' style='width:100%; border-collapse:collapse;'>\n"
                             "     <tr style='background-color:#f2f2f2;'>\n"
@@ -145,7 +153,7 @@ with tab1:
                             "       <td style='padding:8px; vertical-align:top;'>[資料來源]</td>\n"
                             "     </tr>\n"
                             "   </table>\n"
-                            "3. 儲存格內部換行請直接使用 `<br>` 或 `<p>`，內容必須層次分明（使用 1. 2. 與 a. b. c.）。\n\n"
+                            "3. 儲存格內部換行請直接使用 `<br>`，內容必須層次分明（使用 1. 2. 與 a. b. c.）。\n\n"
                             "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
                             "**單元：** [單元名稱]  \n"
@@ -214,7 +222,6 @@ with tab1:
             st.session_state["current_note"] = edited_note
             
         with tab_preview:
-            # 允許 HTML 渲染，確保 HTML <table> 100% 美觀呈現
             st.markdown(st.session_state["current_note"], unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
