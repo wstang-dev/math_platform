@@ -4,7 +4,15 @@ import json
 import os
 import requests
 import time
+import pandas as pd
 import streamlit.components.v1 as components
+
+# 嘗試載入 docx 解析庫（若未安裝會自動提示）
+try:
+    import docx
+    HAS_DOCX = True
+except ImportError:
+    HAS_DOCX = False
 
 # 頁面基本設定
 st.set_page_config(page_title="小學數學科校本 AI 輔助平台", layout="wide", page_icon="📐")
@@ -189,7 +197,7 @@ with tab1:
         st.divider()
         st.subheader("📋 集體備課紀錄（預覽與手動修訂）")
         
-        tab_preview, tab_edit = st.tabs(["👁️ 預覽校本表格", "✏️ 編輯與修正錯字"])
+        tab_preview, tab_edit = st.tabs(["👁️ 預覽校本表格", "✏️ 編輯與修正錯字 (原始碼)"])
         
         with tab_edit:
             edited_note = st.text_area("HTML / Markdown 內容編輯區", value=st.session_state["current_note"], height=400)
@@ -221,14 +229,71 @@ with tab1:
                 st.success("✅ 已成功儲存！可在「📚 歷年備課紀錄庫」分頁按年度與年級查閱。")
 
 # ==========================================
-# Tab 2: 歷年備課紀錄庫
+# Tab 2: 歷年備課紀錄庫（包含 Word 檔案上傳匯入功能）
 # ==========================================
 with tab2:
     st.header("📚 歷年備課紀錄庫")
+    
+    # --- 新增功能：匯入外部 Word / MD 檔案 ---
+    with st.expander("📤 上載既有 Word (.docx) 或 Markdown (.md) 備課紀錄至資料庫", expanded=False):
+        col_u1, col_u2 = st.columns(2)
+        with col_u1:
+            up_year = st.selectbox("請選擇歸檔學年：", ["2025-2026", "2026-2027", "2024-2025"], index=1, key="up_year")
+        with col_u2:
+            up_grade = st.selectbox("請選擇歸檔年級：", ["一年級", "二年級", "三年級", "四年級", "五年級", "六年級"], index=3, key="up_grade")
+            
+        up_file = st.file_uploader("選擇 Word 或 Markdown 檔案", type=["docx", "md", "txt"], key="up_doc_file")
+        
+        if st.button("🚀 匯入並存檔", type="primary", key="btn_import_doc"):
+            if up_file:
+                file_text = ""
+                file_ext = up_file.name.split(".")[-1].lower()
+                
+                if file_ext == "docx":
+                    if not HAS_DOCX:
+                        st.error("⚠️ 伺服器缺少 python-docx 模組，請在 requirements.txt 加入 python-docx。")
+                    else:
+                        doc = docx.Document(up_file)
+                        full_paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+                        file_text = "\n\n".join(full_paragraphs)
+                        
+                        # 簡單抓取表格內容
+                        for table in doc.tables:
+                            file_text += "\n\n<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>"
+                            for row in table.rows:
+                                file_text += "<tr>"
+                                for cell in row.cells:
+                                    file_text += f"<td style='padding:8px;'>{cell.text.strip()}</td>"
+                                file_text += "</tr>"
+                            file_text += "</table>"
+                            
+                elif file_ext in ["md", "txt"]:
+                    file_text = up_file.getvalue().decode("utf-8")
+                
+                if file_text:
+                    history = load_data(HISTORY_FILE)
+                    history.append({
+                        "id": int(time.time()),
+                        "year": up_year,
+                        "grade": up_grade,
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "title": f"（{up_grade}）匯入備課紀錄 ({up_year}) - {up_file.name}",
+                        "content": file_text
+                    })
+                    save_data(HISTORY_FILE, history)
+                    st.success(f"✅ 檔案「{up_file.name}」已成功匯入至歷年紀錄庫！")
+                    time.sleep(1)
+                    st.rerun()
+            else:
+                st.warning("請先選擇要上載的檔案。")
+                
+    st.divider()
+
+    # --- 歷史紀錄檢索與檢視 ---
     history = load_data(HISTORY_FILE)
     
     if not history:
-        st.info("目前尚無儲存的備課紀錄。可以在 Tab 1 生成或修訂後點擊「💾 儲存至歷年紀錄庫」。")
+        st.info("目前尚無儲存的備課紀錄。可以在上方匯入 Word 檔，或在 Tab 1 生成紀錄。")
     else:
         st.subheader("🔍 篩選與檢索")
         col_f1, col_f2 = st.columns(2)
@@ -279,11 +344,11 @@ with tab2:
                     st.rerun()
 
 # ==========================================
-# Tab 3: 課堂互動教材庫 (適配 100% 全螢幕 HTML5 遊戲)
+# Tab 3: 課堂互動教材庫
 # ==========================================
 with tab3:
     st.header("🎮 課堂互動教材與 AI 程式庫")
-    st.write("上載同工製作或 AI 生成的 HTML5 互動教具/遊戲，老師可在課堂上即時開啟給學生遊玩。")
+    st.write("上載同工製作或 AI 生成的 HTML5 互動教具/遊戲，老師可在課堂上點擊開啟或下載。")
     
     with st.expander("➕ 上載新互動教材 (.html 檔)", expanded=False):
         game_title = st.text_input("教材/遊戲名稱", placeholder="例如：11-13的分解和合成(寶石屋數字對決)")
@@ -320,46 +385,54 @@ with tab3:
         selected_idx = game_options.index(selected_game_str)
         current_game = list(reversed(games))[selected_idx]
         
-        st.markdown(f"### 🎮 當前播放：{current_game['title']}")
+        st.markdown(f"### 🎮 選取教材：{current_game['title']}")
         
-        # --- 自動包裹 100% 全寬度/全高度 CSS 適配器 ---
-        responsive_wrapper = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                html, body {{
-                    margin: 0;
-                    padding: 0;
-                    width: 100%;
-                    height: 100%;
-                    overflow: auto;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    background-color: #f8f9fa;
-                }}
-                /* 強制限制遊戲內容自動滿版 */
-                #game-container {{
-                    width: 100%;
-                    height: 100%;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                }}
-            </style>
-        </head>
-        <body>
-            <div id="game-container">
-                {current_game['code']}
-            </div>
-        </body>
-        </html>
-        """
+        col_g1, col_g2 = st.columns([1, 1])
         
-        # 渲染 HTML5 遊戲，高度調升至 720px，寬度自適應 100%
-        components.html(responsive_wrapper, height=720, scrolling=True)
-        
-        st.download_button("📥 下載此 HTML 教材原始碼", data=current_game["code"], file_name=f"{current_game['title']}.html", mime="text/html")
+        with col_g1:
+            show_game = st.checkbox("▶️ 在此畫面展開播放視窗", value=False)
+            
+        with col_g2:
+            st.download_button(
+                "📥 下載此 HTML 教材至電腦", 
+                data=current_game["code"], 
+                file_name=f"{current_game['title']}.html", 
+                mime="text/html"
+            )
+
+        if show_game:
+            responsive_wrapper = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    html, body {{
+                        margin: 0;
+                        padding: 0;
+                        width: 100%;
+                        height: 100%;
+                        overflow: auto;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        background-color: #ffffff;
+                    }}
+                    #game-container {{
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div id="game-container">
+                    {current_game['code']}
+                </div>
+            </body>
+            </html>
+            """
+            components.html(responsive_wrapper, height=720, scrolling=True)
