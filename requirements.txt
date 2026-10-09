@@ -3,3 +3,5 @@ requests
 markdown
 PyGithub
 python-docx
+pandas
+pypdf
