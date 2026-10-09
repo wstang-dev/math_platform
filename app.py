@@ -54,7 +54,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（深度校本版）
+# Tab 1: 集體備課紀錄生成（修復主題與表格錯位）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -65,7 +65,7 @@ with tab1:
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
     if audio_file:
-        if st.button("🚀 開始分析錄音並生成高品質紀錄", type="primary"):
+        if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
             if not cf_account_id or not cf_api_token:
                 st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
             else:
@@ -87,61 +87,51 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                # --- 2/2 使用 Llama 3.3 70B 模型進行深度推理與專業紀錄生成 ---
+                # --- 2/2 AI 整理校本表格（忠於逐字稿真實內容）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在運用 Llama 3.3 70B 模型進行深度數學教學分析與紀錄寫作..."):
+                    with st.spinner("2/2 AI 正在分析會議逐字稿內容，生成專屬校本紀錄..."):
                         today_str = datetime.now().strftime("%Y-%m-%d")
                         clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
                         
                         prompt = (
-                            "你是一位香港資深小學數學科科主席、課程發展主任（CDC）及小學數學教學法專家。\n"
-                            "請根據以下備課會議逐字稿，撰寫一份極具專業深度、細節豐富且符合香港小學數學課程標準（P1-P6）的「集體備課紀錄」。\n\n"
-                            "【極重要撰寫規範】：\n"
-                            "1. **拒絕空洞套話**：請勿撰寫如「進行教學活動」、「使用教具」等籠統字眼。必須寫出**具體數學操作**（例如：以剪刀將平行四邊形沿高剪開，拼砌成等面積的長方形）、**具體提問**及**數學公式**（以 LaTeX 呈現，如 $A = b \\times h$）。\n"
-                            "2. **剖析學生迷思（Misconceptions）**：明確列出該課題學生最常見的認知誤區（例如：混淆斜邊與高、忽視垂直符號、忘記除以 2 等）及具體澄清策略。\n"
-                            "3. **格式純淨無 HTML**：絕對禁止出現 `<br>`、`<p>` 等 HTML 標籤。單元格內分點請直接換行，使用標準 Markdown 數字列表（1. 2. 3.）或符號（-）。\n"
-                            "4. **專業術語校正**：將逐字稿中的廣東話口語及轉寫錯字（如「貨題長方」改為「課題：長方體」、「避距」改為「教具/幾何板」）自動修正為香港數學科專業術語。\n\n"
-                            "【輸出格式】：\n"
+                            "你是一位香港資深小學數學科科主席。\n"
+                            "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份符合香港小學數學科格式的「集體備課紀錄」。\n\n"
+                            "【極重要核心原則】：\n"
+                            "1. **絕對忠於逐字稿**：會議討論什麼課題（如平行四邊形面積），紀錄標題、單元與課題就必須如實記錄！嚴禁捏造或帶入無關的課題（如長方體）。\n"
+                            "2. **標準 Markdown 表格**：必須輸出乾淨合規的 Markdown 表格，絕對禁止出現 `<br>`、`<p>` 或多餘的 `||||` 符號。\n"
+                            "3. **內容深入且專業**：根據逐字稿擴充具體的教學步驟（如割補法、剪拼操作、底高對應）、學生常見迷思（如斜邊當成高）與建議。\n"
+                            "4. **專業用語校正**：將逐字稿中的廣東話口語及轉寫錯別字，修正為香港小學數學科專業術語。\n\n"
+                            "【輸出格式模板】：\n"
                             "### （  ）年級數學科備課紀錄 (2025-2026)\n\n"
-                            "**單元：** [單元名稱]  \n"
-                            "**課題：** [課題名稱]  \n"
-                            "**日期：** " + today_str + "  \n"
-                            "**出席老師：** [根據逐字稿列出]  \n"
-                            "**紀錄老師：** [紀錄老師]  \n\n"
+                            "**單元：** [請根據逐字稿填寫]\n"
+                            "**課題：** [請根據逐字稿填寫]\n"
+                            "**日期：** " + today_str + "\n"
+                            "**出席老師：** [根據逐字稿]\n"
+                            "**紀錄老師：** [根據逐字稿]\n\n"
                             "| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 | 檢討及建議 | 備註 |\n"
                             "| :--- | :--- | :--- | :--- | :--- |\n"
-                            "| 1. **核心概念與公式**\n詳細說明此課題的核心概念與公式導出邏輯。\n\n2. **學生迷思剖析**\n列出學生最易犯錯的認知誤區與澄清點。 | 1. **導入與複習**\n具體情境與複習舊知提問。\n\n2. **探究與操作**\n一步步寫出學生操作教具、分組討論及公式推導過程。\n\n3. **鞏固與應用**\n課堂範例演練與提示點。 | 具體列出教科書冊數、工作紙編號、實物教具（如三角尺、幾何板）、GeoGebra 課件等。 | 1. **課堂形成性評估**\n具體的觀察點與提問設計。\n\n2. **分層教學策略**\n針對能力較弱及資優學生的具體抽離/延伸建議。 | 具體教學資源準備、特別注意事項及分工。 |\n\n"
-                            "會議逐字稿內容：\n" + clean_transcript
+                            "| 1. [針對該課題的核心重點與學生迷思] | 1. [具體教學程序 a. b. c.] | [教科書/工作紙/教具] | 1. [課堂評估與檢討] | [注意事項與分工] |\n"
+                            "| 2. [第二個重點或難點] | 2. [第二個教學程序] | [相關資源] | 2. [進階建議] | [備註] |\n\n"
+                            "會議逐字稿：\n" + clean_transcript
                         )
                         
-                        # 採用 Llama 3.3 70B 大模型
                         llm_res = run_cf_ai(
-                            "@cf/meta/llama-3.3-70b-instruct-fp8-fast", 
+                            "@cf/meta/llama-3.1-8b-instruct", 
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位香港頂尖的小學數學科教學專家，專門寫作高水準、無 HTML 雜訊、具體扎實的教案與備課紀錄。"},
+                                    {"role": "system", "content": "你是一位專業的香港小學數學教學助理，完全忠實於會議逐字稿，不憑空捏造無關課題。"},
                                     {"role": "user", "content": prompt}
                                 ],
-                                "max_tokens": 3000,
-                                "temperature": 0.2
+                                "max_tokens": 2500,
+                                "temperature": 0.1
                             }
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
-                            st.toast("✅ 高品質校本紀錄生成成功！", icon="📋")
+                            st.toast("✅ 專屬備課紀錄生成成功！", icon="📋")
                         else:
-                            # 備用機制：若 70B 繁忙則自動切換至 3.1 8B
-                            llm_res = run_cf_ai(
-                                "@cf/meta/llama-3.1-8b-instruct", 
-                                {"Authorization": f"Bearer {cf_api_token}"}, 
-                                payload={"messages": [{"role": "user", "content": prompt}], "max_tokens": 2500}
-                            )
-                            if llm_res.get("success"):
-                                st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
-                                st.toast("✅ 校本紀錄生成成功！", icon="📋")
-                            else:
-                                st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
+                            st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
     # 2. 展示區
     if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
@@ -150,7 +140,7 @@ with tab1:
 
     if "current_note" in st.session_state and st.session_state["current_note"]:
         st.divider()
-        st.subheader("📋 高品質集體備課紀錄（預覽與即時修訂）")
+        st.subheader("📋 集體備課紀錄（預覽與手動修訂）")
         
         tab_preview, tab_edit = st.tabs(["👁️ 預覽校本表格", "✏️ 編輯與修正錯字"])
         
