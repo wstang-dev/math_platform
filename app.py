@@ -145,24 +145,30 @@ with tab1:
             st.success(f"📖 已順利讀取校本備課手冊：「{guide_file.name}」（共提煉 {len(guide_text)} 個字元）")
 
     if audio_file:
-        file_bytes = audio_file.getvalue()
+        audio_file.seek(0)
+        file_bytes = audio_file.read()
         file_size_mb = len(file_bytes) / (1024 * 1024)
         st.caption(f"📁 錄音檔案大小：{file_size_mb:.2f} MB")
 
         if st.button("🚀 開始分析錄音並生成校本紀錄", type="primary"):
             if not cf_account_id or not cf_api_token:
                 st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
+            elif len(file_bytes) == 0:
+                st.error("❌ 讀取到的錄音檔數據為空，請重新選取上傳錄音檔！")
             else:
                 attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
                 recorder_str = selected_recorder
 
-                # --- 1/2 語音轉寫 ---
-                with st.spinner("1/2 語音轉寫中（透過安全通道連線 Cloudflare Whisper）..."):
-                    headers = {
+                # --- 1/2 語音轉寫 (防失真高穩定版) ---
+                with st.spinner("1/2 語音轉寫中（正在連線 Cloudflare Whisper 節點）..."):
+                    binary_headers = {
+                        "Authorization": f"Bearer {cf_api_token}", 
+                        "Content-Type": "application/octet-stream"
+                    }
+                    json_headers = {
                         "Authorization": f"Bearer {cf_api_token}", 
                         "Content-Type": "application/json"
                     }
-                    audio_int_list = list(file_bytes)
                     
                     models = [
                         "@cf/openai/whisper-large-v3-turbo",
@@ -170,25 +176,27 @@ with tab1:
                     ]
                     
                     res = None
+                    # 優先以原生 Octet-stream 傳送
                     for m in models:
-                        res = run_cf_ai(m, headers, payload={"audio": audio_int_list}, is_json=True)
+                        res = run_cf_ai(m, binary_headers, payload=file_bytes, is_json=False)
                         if res and res.get("success"):
                             break
                         time.sleep(1)
                     
+                    # 備用 Base64 JSON 傳送通道
                     if not (res and res.get("success")):
-                        binary_headers = {
-                            "Authorization": f"Bearer {cf_api_token}", 
-                            "Content-Type": "application/octet-stream"
-                        }
-                        res = run_cf_ai("@cf/openai/whisper-large-v3-turbo", binary_headers, payload=file_bytes, is_json=False)
+                        try:
+                            audio_b64 = base64.b64encode(file_bytes).decode("utf-8")
+                            res = run_cf_ai("@cf/openai/whisper-large-v3-turbo", json_headers, payload={"audio": audio_b64}, is_json=True)
+                        except:
+                            pass
 
                     if res and res.get("success"):
                         st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
                         st.toast("✅ 語音轉寫成功！", icon="🎙️")
                     else:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
-                        st.error(f"❌ 語音轉寫失敗：{err_msg}")
+                        st.error(f"❌ 語音转寫失敗：{err_msg}。請稍微重新上傳檔案後再試一次。")
 
                 # --- 2/2 AI 融合整理 ---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
