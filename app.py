@@ -61,7 +61,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（支援點選出席/紀錄老師）
+# Tab 1: 集體備課紀錄生成（高品質校本內容版）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -69,14 +69,20 @@ with tab1:
     if not cf_account_id or not cf_api_token:
         st.warning("⚠️ 提示：未偵測到 Cloudflare API 金鑰，請在左側邊欄 (Sidebar) 設定。")
 
-    # --- 新增：老師名單勾選區 ---
-    st.subheader("📝 會議基本資料與出席名單")
+    # --- 校本資訊選擇區 ---
+    st.subheader("📝 會議基本資料設定")
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        selected_grade = st.selectbox("📌 請選擇年級：", ["一", "二", "三", "四", "五", "六"], index=3)
+    with col_g2:
+        selected_school_year = st.selectbox("📅 請選擇學年：", ["2025-2026", "2026-2027"], index=1)
+
     col_t1, col_t2 = st.columns(2)
     with col_t1:
         selected_attendees = st.multiselect(
             "👥 請勾選出席老師：", 
             options=TEACHERS_LIST,
-            default=TEACHERS_LIST[:3]  # 預設勾選前三位
+            default=["鄧慧姍", "陳月娥", "容佩誼"]
         )
     with col_t2:
         selected_recorder = st.selectbox(
@@ -90,7 +96,7 @@ with tab1:
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
     if audio_file:
-        if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
+        if st.button("🚀 開始分析錄音並生成校本紀錄", type="primary"):
             if not cf_account_id or not cf_api_token:
                 st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
             else:
@@ -115,35 +121,38 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                # --- 2/2 AI 整理校本表格（注入已點選的老師名單）---
+                # --- 2/2 AI 整理校本表格（強化高質量內容生成）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在分析會議逐字稿內容，生成專屬校本紀錄..."):
-                        today_str = datetime.now().strftime("%Y-%m-%d")
+                    with st.spinner("2/2 AI 正在分析會議內容，整理高質感校本備課內容..."):
+                        today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
                         
                         prompt = (
-                            "你是一位香港資深小學數學科科主席。\n"
-                            "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份符合香港小學數學科格式的「集體備課紀錄」。\n\n"
-                            "【極重要核心原則】：\n"
-                            "1. **絕對忠於逐字稿內容**：會議討論什麼課題，紀錄標題、單元與課題就必須如實記錄！嚴禁捏造無關課題。\n"
-                            "2. **老師名單設定**：\n"
-                            "   - 出席老師請務必寫為：`" + attendees_str + "`\n"
-                            "   - 紀錄老師請務必寫為：`" + recorder_str + "`\n"
-                            "3. **標準 Markdown 表格**：必須輸出乾淨合規的 Markdown 表格，絕對禁止出現 `<br>`、`<p>` 或多餘的 `||||` 符號。\n"
-                            "4. **內容深入且專業**：根據逐字稿擴充具體的教學步驟（如割補法、剪拼操作、底高對應）、學生常見迷思與建議。\n"
-                            "5. **專業用語校正**：將逐字稿中的廣東話口語及轉寫錯別字，修正為香港小學數學科專業術語。\n\n"
+                            "你是一位香港資深小學數學科科主席及課程專家。\n"
+                            "請根據以下備課會議逐字稿，撰寫一份內容極其扎實、條理清晰且完全符合「嘉諾撒撒心學校（九龍塘）」質素要求的「集體備課紀錄」。\n\n"
+                            "【內容與寫作質量要求】：\n"
+                            "1. **實事求是與深度擴充**：精準歸納會議討論的數學課題（例如平行四邊形面積）。教學程序必須寫出具體的課堂活動（如：使用三角尺與直角尺找出對應底高、以 GeoGebra 進行分割拼砌長方形演示、運用工作紙進行進展性評估等）。\n"
+                            "2. **結構化層次（1. 配合 a. b. c.）**：\n"
+                            "   - 「教學重點/難點」請列出 1. 2.\n"
+                            "   - 「教學程序/解決方法」請使用清晰主次編號，例如：\n"
+                            "     1. 介紹平行四邊形面積公式\n"
+                            "        a. 使用教具：三角尺、直角尺找出對應的底和高\n"
+                            "        b. 老師示範範用 GeoGebra 將平行四邊形分割再拼成長方形\n"
+                            "        c. 提供實例計算\n"
+                            "3. **格式規範禁令**：絕對禁止在輸出內容中出現 `<br>`、`<p>` 等 HTML 標籤！表格內換行請使用 Markdown 標準換行。\n"
+                            "4. **專業語彙校正**：將逐字稿中的口語及轉寫錯別字（如「貨題長方」改為「課題：長方體」）修正為香港小學數學科專業術語。\n\n"
                             "【輸出格式模板】：\n"
-                            "### （  ）年級數學科備課紀錄 (2025-2026)\n\n"
-                            "**單元：** [請根據逐字稿填寫]\n"
-                            "**課題：** [請根據逐字稿填寫]\n"
-                            "**日期：** " + today_str + "\n"
-                            "**出席老師：** " + attendees_str + "\n"
-                            "**紀錄老師：** " + recorder_str + "\n\n"
+                            "# 嘉諾撒撒心學校（九龍塘）\n"
+                            "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
+                            "**單元：** [單元名稱]  \n"
+                            "**課題：** [課題名稱]  \n"
+                            "**日期：** " + today_str + "  \n"
+                            "**出席老師：** " + attendees_str + "  \n"
+                            "**紀錄老師：** " + recorder_str + "  \n\n"
                             "| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 | 檢討及建議 | 備註 |\n"
                             "| :--- | :--- | :--- | :--- | :--- |\n"
-                            "| 1. [針對該課題的核心重點與學生迷思] | 1. [具體教學程序 a. b. c.] | [教科書/工作紙/教具] | 1. [課堂評估與檢討] | [注意事項與分工] |\n"
-                            "| 2. [第二個重點或難點] | 2. [第二個教學程序] | [相關資源] | 2. [進階建議] | [備註] |\n\n"
-                            "會議逐字稿：\n" + clean_transcript
+                            "| 1. [核心教學重點]\n\n2. [學生主要難點/迷思] | 1. [主程序 1]\n   a. [具體教學操作步驟]\n   b. [教具/軟件使用細節]\n   c. [課堂鞏固與計算]\n2. [解決方法/針對難點之策略]\n   a. [強化理解的具體做法] | 教科書\nGeoGebra\n工作紙 | 1. [課堂檢討建議 1]\n2. [課堂檢討建議 2] | [備註與注意事項] |\n\n"
+                            "會議逐字稿內容：\n" + clean_transcript
                         )
                         
                         llm_res = run_cf_ai(
@@ -151,16 +160,16 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位專業的香港小學數學教學助理，完全忠實於會議逐字稿，不憑空捏造無關課題。"},
+                                    {"role": "system", "content": "你是一位專業的香港小學數學教學專家，文字精煉流暢，排版嚴謹無 HTML 雜訊。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
-                                "temperature": 0.1
+                                "temperature": 0.2
                             }
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
-                            st.toast("✅ 專屬備課紀錄生成成功！", icon="📋")
+                            st.toast("✅ 高質量校本紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
@@ -196,7 +205,7 @@ with tab1:
                 history.append({
                     "id": len(history) + 1,
                     "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "title": f"數學備課紀錄 ({datetime.now().strftime('%Y-%m-%d')})",
+                    "title": f"嘉諾撒撒心學校_{selected_grade}年級備課紀錄_({datetime.now().strftime('%Y-%m-%d')})",
                     "content": st.session_state["current_note"]
                 })
                 save_data(HISTORY_FILE, history)
@@ -210,57 +219,3 @@ with tab2:
     history = load_data(HISTORY_FILE)
     if not history:
         st.info("目前尚無儲存的備課紀錄。可以在 Tab 1 生成或修訂後點擊「💾 儲存至歷年紀錄庫」。")
-    else:
-        titles = [f"{item['date']} - {item['title']}" for item in reversed(history)]
-        selected = st.selectbox("選擇要查閱的備課紀錄", titles)
-        idx = titles.index(selected)
-        item = list(reversed(history))[idx]
-        
-        st.markdown(item["content"])
-        st.download_button("📥 下載此紀錄 (.md)", data=item["content"], file_name=f"{item['title']}.md", mime="text/markdown")
-
-# ==========================================
-# Tab 3: 課堂互動教材庫 (HTML5 / AI 遊戲)
-# ==========================================
-with tab3:
-    st.header("🎮 課堂互動教材與 AI 程式庫")
-    st.write("上載同工製作或 AI 生成的 HTML5 互動教具/遊戲，老師可在課堂上即時開啟給學生遊玩。")
-    
-    with st.expander("➕ 上載新互動教材 (.html 檔)", expanded=False):
-        game_title = st.text_input("教材/遊戲名稱", placeholder="例如：小三分數大小比較遊戲")
-        game_grade = st.selectbox("適用年級", ["小一", "小二", "小三", "小四", "小五", "小六", "全校通用"])
-        html_file = st.file_uploader("上傳單頁 HTML 檔", type=["html", "htm"])
-        
-        if st.button("🚀 發布教材至教材庫", type="primary"):
-            if game_title and html_file:
-                html_code = html_file.getvalue().decode("utf-8")
-                games = load_data(GAMES_FILE)
-                games.append({
-                    "id": len(games) + 1,
-                    "title": game_title,
-                    "grade": game_grade,
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "code": html_code
-                })
-                save_data(GAMES_FILE, games)
-                st.success(f"✅ 教材「{game_title}」發布成功！")
-                st.rerun()
-            else:
-                st.warning("請填寫名稱並上傳 HTML 檔案。")
-                
-    st.divider()
-    
-    games = load_data(GAMES_FILE)
-    if not games:
-        st.info("💡 目前教材庫尚未有互動教具，點擊上方「上載新互動教材」來建立第一個課堂遊戲吧！")
-    else:
-        st.subheader("🎯 選擇課堂教材並開始互動")
-        game_options = [f"[{g['grade']}] {g['title']} ({g['date']})" for g in reversed(games)]
-        selected_game_str = st.selectbox("選擇要播放的教材", game_options)
-        
-        selected_idx = game_options.index(selected_game_str)
-        current_game = list(reversed(games))[selected_idx]
-        
-        st.markdown(f"### 🎮 當前播放：{current_game['title']}")
-        components.html(current_game["code"], height=600, scrolling=True)
-        st.download_button("📥 下載此 HTML 教材原始碼", data=current_game["code"], file_name=f"{current_game['title']}.html", mime="text/html")
