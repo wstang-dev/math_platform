@@ -61,7 +61,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成（校本對齊版）
+# Tab 1: 集體備課紀錄生成（簡化 3 欄高效版）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -69,7 +69,7 @@ with tab1:
     if not cf_account_id or not cf_api_token:
         st.warning("⚠️ 提示：未偵測到 Cloudflare API 金鑰，請在左側邊欄 (Sidebar) 設定。")
 
-    # --- 校本資訊選擇區 ---
+    # --- 基本資料選擇區 ---
     st.subheader("📝 會議基本資料設定")
     col_g1, col_g2 = st.columns(2)
     with col_g1:
@@ -96,7 +96,7 @@ with tab1:
     audio_file = st.file_uploader("上傳會議錄音/影片檔", type=["mp3", "m4a", "wav", "webm", "mp4"])
 
     if audio_file:
-        if st.button("🚀 開始分析錄音並生成校本紀錄", type="primary"):
+        if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
             if not cf_account_id or not cf_api_token:
                 st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
             else:
@@ -121,32 +121,31 @@ with tab1:
                         err_msg = res.get("errors", [{}])[0].get("message", "轉寫失敗") if res else "連線失敗"
                         st.error(f"❌ 語音轉寫失敗：{err_msg}")
 
-                # --- 2/2 AI 整理校本表格（使用 <br> 防止表格跑版）---
+                # --- 2/2 AI 整理校本表格（只輸出 3 個 Column，穩定防破裂）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在分析會議內容，生成對齊 Word 表格的校本紀錄..."):
+                    with st.spinner("2/2 AI 正在分析會議內容，生成 3 欄結構化紀錄..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
                         
                         prompt = (
                             "你是一位香港資深小學數學科科主席。\n"
-                            "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份完全符合嘉諾撒撒心學校（九龍塘）格式的「集體備課紀錄」。\n\n"
-                            "【極重要表格排版規範】：\n"
-                            "1. **儲存格內換行**：Markdown 表格內部【絕對禁止直接按 Enter 換行】！儲存格內若有多個點或縮排，必須使用 `<br>` 標籤連貫成同一行寫完，否則表格會破裂跑版。\n"
-                            "2. **層次結構**：\n"
-                            "   - 教學程序請寫成：`1. 介紹平行四邊形面積公式<br>&nbsp;&nbsp;a. 使用教具：三角尺，直角尺找出對應的底和高<br>&nbsp;&nbsp;b. 老師示範範用 GeoGebra 將平行四邊形分割再拼成長方形<br>&nbsp;&nbsp;c. 提供實例計算`\n"
-                            "   - 教學重點請寫成：`1. 學生理解平行四邊形面積公式的核心教學重點<br><br>2. 學生找不到對應的高，忽略周界關係`\n"
-                            "3. **嚴格欄位對齊**：每一行表格必須包含完整的 5 個欄位（用 `|` 隔開）：`| 教學重點/難點 | 教學程序/解決方法 | 資料來源 | 檢討及建議 | 備註 |`。\n\n"
+                            "請【嚴格根據以下會議逐字稿的真實討論內容】，整理出一份結構清晰的「小學數學科集體備課紀錄」。\n\n"
+                            "【格式與欄位極嚴格指示】：\n"
+                            "1. **絕對不輸出校名**。\n"
+                            "2. **只允許 3 個 Column**：表格標頭必須嚴格為 `| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 |`。\n"
+                            "3. **儲存格內換行**：表格內部【絕對禁止 Enter 換行】，換行必須統一寫成 `<br>`，確保表格 100% 鎖在同一列內不破裂。\n"
+                            "4. **次級清單結構**：\n"
+                            "   - 教學程序請使用 `1. ...<br>&nbsp;&nbsp;a. ...<br>&nbsp;&nbsp;b. ...` 展示細節與步驟。\n\n"
                             "【輸出格式模板】：\n"
-                            "# 嘉諾撒撒心學校（九龍塘）\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
                             "**單元：** [單元名稱]  \n"
                             "**課題：** [課題名稱]  \n"
                             "**日期：** " + today_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
-                            "| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 | 檢討及建議 | 備註 |\n"
-                            "| :--- | :--- | :--- | :--- | :--- |\n"
-                            "| 1. 平行四邊形面積計算<br><br>2. 學生未能找出底和對應的高 | 1. 介紹平行四邊形面積公式<br>&nbsp;&nbsp;a. 使用教具：三角尺，直角尺找出對應的底和高<br>&nbsp;&nbsp;b. 老師示範範用 GeoGebra 將平行四邊形分割再拼成長方形<br>&nbsp;&nbsp;c. 提供實例計算<br><br>2. 強調找到對應的底和高<br>&nbsp;&nbsp;a. 使用進展工作紙找底部和高的關係，強化學生對底部和高的理解 | 教科書<br>GeoGebra<br>工作紙 | 1. 在課堂上進行多次練習，以幫助學生鞏固理解 | [備註事項] |\n\n"
+                            "| 教學重點 / 難點 | 教學程序 / 解決方法 | 資料來源 |\n"
+                            "| :--- | :--- | :--- |\n"
+                            "| 1. 平行四邊形面積計算<br><br>2. 學生未能找出底和對應的高 | 1. 介紹平行四邊形面積公式<br>&nbsp;&nbsp;a. 使用教具：三角尺，直角尺找出對應的底和高<br>&nbsp;&nbsp;b. 老師示範用 GeoGebra 將平行四邊形分割再拼成長方形<br>&nbsp;&nbsp;c. 提供實例計算<br><br>2. 強調找到對應的底和高<br>&nbsp;&nbsp;a. 使用進展工作紙找底部和高的關係，強化學生對底部和高的理解 | 教科書<br>GeoGebra<br>工作紙 |\n\n"
                             "會議逐字稿內容：\n" + clean_transcript
                         )
                         
@@ -155,7 +154,7 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位專業的香港小學數學教學助理，表格排版無懈可擊，內容完全符合校本要求。"},
+                                    {"role": "system", "content": "你是一位專業的香港小學數學教學助理，只輸出 3 欄標準 Markdown 表格，排版極其穩定。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
@@ -164,7 +163,7 @@ with tab1:
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
-                            st.toast("✅ 校本紀錄生成成功！", icon="📋")
+                            st.toast("✅ 備課紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
@@ -200,7 +199,7 @@ with tab1:
                 history.append({
                     "id": len(history) + 1,
                     "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                    "title": f"嘉諾撒撒心學校_{selected_grade}年級備課紀錄_({datetime.now().strftime('%Y-%m-%d')})",
+                    "title": f"{selected_grade}年級備課紀錄_({datetime.now().strftime('%Y-%m-%d')})",
                     "content": st.session_state["current_note"]
                 })
                 save_data(HISTORY_FILE, history)
@@ -258,7 +257,7 @@ with tab3:
     if not games:
         st.info("💡 目前教材庫尚未有互動教具，點擊上方「上載新互動教材」來建立第一個課堂遊戲吧！")
     else:
-        st.subheader("🎯 選擇課堂教材並開始互動")
+        st.subheader("🎯 選擇課堂教材與開始互動")
         game_options = [f"[{g['grade']}] {g['title']} ({g['date']})" for g in reversed(games)]
         selected_game_str = st.selectbox("選擇要播放的教材", game_options)
         
