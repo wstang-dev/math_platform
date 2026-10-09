@@ -4,10 +4,9 @@ import json
 import os
 import requests
 import time
-import pandas as pd
-import streamlit.components.v1 as components
+import webbrowser
 
-# 嘗試載入 docx 解析庫（若未安裝會自動提示）
+# 嘗試載入 docx 解析庫
 try:
     import docx
     HAS_DOCX = True
@@ -67,10 +66,10 @@ def run_cf_ai(model_name, headers, payload, is_binary=False):
 
 st.title("📐 小學數學科校本 AI 輔助與教材平台")
 
-tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🎮 課堂互動教材庫"])
+tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成
+# Tab 1: 集體備課紀錄生成（專業術語修復版）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -119,12 +118,11 @@ with tab1:
                     
                     models = [
                         "@cf/openai/whisper-large-v3-turbo", 
-                        "@cf/openai/whisper",
-                        "@cf/openai/whisper-large-v3-turbo"
+                        "@cf/openai/whisper"
                     ]
                     
                     res = None
-                    for attempt, m in enumerate(models):
+                    for m in models:
                         res = run_cf_ai(m, whisper_headers, payload=file_bytes, is_binary=True)
                         if res and res.get("success"):
                             break
@@ -134,26 +132,31 @@ with tab1:
                         st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
                         st.toast("✅ 語音轉寫完成！", icon="🎙️")
                     else:
-                        err_msg = res.get("errors", [{}])[0].get("message", "Cloudflare 語音服務繁忙") if res else "連線失敗"
-                        st.error(f"❌ 語音轉寫失敗：{err_msg}。請稍等 5 秒後重新點擊「🚀 開始分析錄音」。")
+                        err_msg = res.get("errors", [{}])[0].get("message", "語音處理失敗") if res else "連線失敗"
+                        st.error(f"❌ 語音轉寫失敗：{err_msg}。")
 
-                # --- 2/2 AI 整理校本表格 ---
+                # --- 2/2 AI 整理校本表格（加入香港數學科專業術語修訂規範）---
                 if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                    with st.spinner("2/2 AI 正在分析會議內容，提煉結構化紀錄..."):
+                    with st.spinner("2/2 AI 正在分析會議內容，精準校正數學專業術語..."):
                         today_str = datetime.now().strftime("%d-%m-%Y")
                         clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
                         
                         prompt = (
-                            "你是一位香港資深小學數學科科主席與課程專家。\n"
-                            "請【完全根據以下會議逐字稿的真實討論內容】，整理出一份結構清晰的「小學數學科集體備課紀錄」。\n\n"
-                            "【極嚴格禁止與撰寫指令】：\n"
-                            "1. **絕對禁止重複複製**：每一行的內容必須根據會議討論的不同主題單獨撰寫，絕對不可以把上一行的句子重複複製到下一行！\n"
-                            "2. **請嚴格將討論歸納為 2 個或 3 個不重複的項目**。\n"
-                            "3. **格式要求**：只輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），儲存格內換行使用 `<br>`，並以 1. 2. 與 a. b. 縮排展現步驟。\n\n"
-                            "【輸出結構示例】：\n"
+                            "你是一位香港資深小學數學科科主席與課程專家（CDC）。\n"
+                            "請根據以下會議逐字稿，撰寫一份極具專業深度、條理分明且精準的「集體備課紀錄」。\n\n"
+                            "【極重要專業術語修訂與教學寫作規則】：\n"
+                            "1. **同音字與口語校正**：\n"
+                            "   - 逐字稿中的「體型」必須自動修訂為「**梯形**」。\n"
+                            "   - 逐字稿中的「周界」若指邊長，請根據語境修訂為「**底與高的關係**」或「**邊長**」。\n"
+                            "   - 若討論課題為平行四邊形，請將提及的「直角三角形」根據語境修訂為「**平行四邊形內的高與直角關係**」。\n"
+                            "2. **高質量的教學程序（1. 配合 a. b. c.）**：\n"
+                            "   - 「教學程序 / 解決方法」欄位請寫出具體的課堂操作（例如：使用三角尺及直角尺量度高、GeoGebra 割補分割拼砌、進展工作紙釐清迷思）。\n"
+                            "   - **絕對禁止複製上一行的內容到下一行**！每一行必須獨立針對不同的教學重點。\n"
+                            "3. **格式要求**：只輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），絕對不輸出校名，儲存格內換行統一使用 `<br>`。\n\n"
+                            "【輸出格式模板】：\n"
                             "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                            "**單元：** [根據內容寫單元]  \n"
-                            "**課題：** [根據內容寫課題]  \n"
+                            "**單元：** [根據逐字稿歸納單元，如：平面圖形面積]  \n"
+                            "**課題：** [根據逐字稿歸納課題，如：平行四邊形面積]  \n"
                             "**日期：** " + today_str + "  \n"
                             "**出席老師：** " + attendees_str + "  \n"
                             "**紀錄老師：** " + recorder_str + "  \n\n"
@@ -163,7 +166,7 @@ with tab1:
                             "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
                             "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
                             "  </tr>\n"
-                            "  <!-- 根據逐字稿實際討論，輸出 2 至 3 列完全不重複的 <tr> -->\n"
+                            "  <!-- 根據逐字稿，輸出 2 至 3 列完全不重複且修正術語後的 <tr> 區塊 -->\n"
                             "</table>\n\n"
                             "會議逐字稿內容：\n" + clean_transcript
                         )
@@ -173,18 +176,18 @@ with tab1:
                             {"Authorization": f"Bearer {cf_api_token}"}, 
                             payload={
                                 "messages": [
-                                    {"role": "system", "content": "你是一位香港小學數學專家。請嚴格根據輸入的逐字稿整理備課紀錄，每一行的內容必須獨立且絕不重複。"},
+                                    {"role": "system", "content": "你是一位專業的香港小學數學課程專家，善於校正語音錯別字，輸出專業且不重複的教學步驟。"},
                                     {"role": "user", "content": prompt}
                                 ],
                                 "max_tokens": 2500,
-                                "temperature": 0.1
+                                "temperature": 0.2
                             }
                         )
                         if llm_res.get("success"):
                             st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
                             st.session_state["current_grade"] = selected_grade
                             st.session_state["current_year"] = selected_school_year
-                            st.toast("✅ 校本紀錄生成成功！", icon="📋")
+                            st.toast("✅ 高質量校本紀錄生成成功！", icon="📋")
                         else:
                             st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
@@ -229,12 +232,12 @@ with tab1:
                 st.success("✅ 已成功儲存！可在「📚 歷年備課紀錄庫」分頁按年度與年級查閱。")
 
 # ==========================================
-# Tab 2: 歷年備課紀錄庫（包含 Word 檔案上傳匯入功能）
+# Tab 2: 歷年備課紀錄庫
 # ==========================================
 with tab2:
     st.header("📚 歷年備課紀錄庫")
     
-    # --- 新增功能：匯入外部 Word / MD 檔案 ---
+    # --- 上載 Word / MD ---
     with st.expander("📤 上載既有 Word (.docx) 或 Markdown (.md) 備課紀錄至資料庫", expanded=False):
         col_u1, col_u2 = st.columns(2)
         with col_u1:
@@ -257,7 +260,6 @@ with tab2:
                         full_paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
                         file_text = "\n\n".join(full_paragraphs)
                         
-                        # 簡單抓取表格內容
                         for table in doc.tables:
                             file_text += "\n\n<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>"
                             for row in table.rows:
@@ -284,14 +286,10 @@ with tab2:
                     st.success(f"✅ 檔案「{up_file.name}」已成功匯入至歷年紀錄庫！")
                     time.sleep(1)
                     st.rerun()
-            else:
-                st.warning("請先選擇要上載的檔案。")
-                
+
     st.divider()
 
-    # --- 歷史紀錄檢索與檢視 ---
     history = load_data(HISTORY_FILE)
-    
     if not history:
         st.info("目前尚無儲存的備課紀錄。可以在上方匯入 Word 檔，或在 Tab 1 生成紀錄。")
     else:
@@ -344,95 +342,79 @@ with tab2:
                     st.rerun()
 
 # ==========================================
-# Tab 3: 課堂互動教材庫
+# Tab 3: 課堂互動教材庫 (純 Link 連結版，不用上載 HTML)
 # ==========================================
 with tab3:
-    st.header("🎮 課堂互動教材與 AI 程式庫")
-    st.write("上載同工製作或 AI 生成的 HTML5 互動教具/遊戲，老師可在課堂上點擊開啟或下載。")
+    st.header("🔗 課堂互動教材與外部資源連結庫")
+    st.write("同工可在此新增 GeoGebra、Wordwall 或各類課堂互動遊戲的網址 (Link)，點擊按鈕即可於新分頁開啟！")
     
-    with st.expander("➕ 上載新互動教材 (.html 檔)", expanded=False):
-        game_title = st.text_input("教材/遊戲名稱", placeholder="例如：11-13的分解和合成(寶石屋數字對決)")
-        game_grade = st.selectbox("適用年級", ["小一", "小二", "小三", "小四", "小五", "小六", "全校通用"])
-        html_file = st.file_uploader("上傳單頁 HTML 檔", type=["html", "htm"])
+    with st.expander("➕ 新增教材/遊戲網址 (Link)", expanded=False):
+        link_title = st.text_input("教材/遊戲名稱", placeholder="例如：寶石屋數字對決遊戲 / GeoGebra 平行四邊形切割演示")
+        link_url = st.text_input("網址 (URL)", placeholder="例如：https://example.com/game 或 GeoGebra 連結")
+        link_grade = st.selectbox("適用年級", ["小一", "小二", "小三", "小四", "小五", "小六", "全校通用"])
         
-        if st.button("🚀 發布教材至教材庫", type="primary"):
-            if game_title and html_file:
-                html_code = html_file.getvalue().decode("utf-8")
+        if st.button("🚀 發布教材連結", type="primary"):
+            if link_title and link_url:
+                if not (link_url.startswith("http://") or link_url.startswith("https://")):
+                    link_url = "https://" + link_url
+                
                 games = load_data(GAMES_FILE)
                 games.append({
                     "id": int(time.time()),
-                    "title": game_title,
-                    "grade": game_grade,
-                    "date": datetime.now().strftime("%Y-%m-%d"),
-                    "code": html_code
+                    "title": link_title,
+                    "url": link_url,
+                    "grade": link_grade,
+                    "date": datetime.now().strftime("%Y-%m-%d")
                 })
                 save_data(GAMES_FILE, games)
-                st.success(f"✅ 教材「{game_title}」發布成功！")
+                st.success(f"✅ 教材連結「{link_title}」已成功新增！")
                 st.rerun()
             else:
-                st.warning("請填寫名稱並上傳 HTML 檔案。")
+                st.warning("請填寫教材名稱與完整網址。")
                 
     st.divider()
     
     games = load_data(GAMES_FILE)
     if not games:
-        st.info("💡 目前教材庫尚未有互動教具，點擊上方「上載新互動教材」來建立第一個課堂遊戲吧！")
+        st.info("💡 目前教材庫尚無連結，點擊上方「新增教材/遊戲網址 (Link)」來建立第一個連結吧！")
     else:
-        st.subheader("🎯 選擇課堂教材與開始互動")
-        game_options = [f"[{g['grade']}] {g['title']} ({g['date']})" for g in reversed(games)]
-        selected_game_str = st.selectbox("選擇要播放的教材", game_options)
+        st.subheader("🎯 選擇課堂教材並開啟連結")
         
-        selected_idx = game_options.index(selected_game_str)
-        current_game = list(reversed(games))[selected_idx]
+        # 依年級分類展示
+        grade_filter = st.selectbox("依年級篩選教材：", ["全校通用/全部", "小一", "小二", "小三", "小四", "小五", "小六"])
         
-        st.markdown(f"### 🎮 選取教材：{current_game['title']}")
-        
-        col_g1, col_g2 = st.columns([1, 1])
-        
-        with col_g1:
-            show_game = st.checkbox("▶️ 在此畫面展開播放視窗", value=False)
+        filtered_games = games
+        if grade_filter != "全校通用/全部":
+            filtered_games = [g for g in games if g.get("grade") == grade_filter or g.get("grade") == "全校通用"]
             
-        with col_g2:
-            st.download_button(
-                "📥 下載此 HTML 教材至電腦", 
-                data=current_game["code"], 
-                file_name=f"{current_game['title']}.html", 
-                mime="text/html"
-            )
-
-        if show_game:
-            responsive_wrapper = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    html, body {{
-                        margin: 0;
-                        padding: 0;
-                        width: 100%;
-                        height: 100%;
-                        overflow: auto;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        background-color: #ffffff;
-                    }}
-                    #game-container {{
-                        width: 100%;
-                        height: 100%;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div id="game-container">
-                    {current_game['code']}
-                </div>
-            </body>
-            </html>
-            """
-            components.html(responsive_wrapper, height=720, scrolling=True)
+        if not filtered_games:
+            st.warning("沒有此年級的教材連結。")
+        else:
+            for idx, g in enumerate(reversed(filtered_games)):
+                col_m1, col_m2, col_m3 = st.columns([3, 2, 1])
+                with col_m1:
+                    st.markdown(f"**[{g.get('grade', '通用')}] {g['title']}**")
+                    st.caption(f"新增日期：{g.get('date', '')} | 網址：{g.get('url', '')}")
+                with col_m2:
+                    # 原生 HTML 按鈕，在新分頁開啟連結
+                    target_url = g.get('url', '#')
+                    st.markdown(
+                        f'''<a href="{target_url}" target="_blank" style="
+                            display: inline-block;
+                            padding: 8px 16px;
+                            background-color: #FF4B4B;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 6px;
+                            font-weight: bold;
+                        ">🔗 在新分頁開啟教材</a>''', 
+                        unsafe_allow_html=True
+                    )
+                with col_m3:
+                    if st.button("🗑️ 刪除", key=f"del_link_{g['id']}"):
+                        updated_games = [item for item in games if item.get("id") != g.get("id")]
+                        save_data(GAMES_FILE, updated_games)
+                        st.success("已刪除該連結！")
+                        time.sleep(0.5)
+                        st.rerun()
+                st.divider()
