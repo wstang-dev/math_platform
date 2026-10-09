@@ -2,3 +2,4 @@ streamlit
 requests
 markdown
 PyGithub
+python-docx
