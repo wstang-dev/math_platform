@@ -76,7 +76,7 @@ def run_openrouter_ai(prompt, system_prompt, api_key):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
+        "model": "model": "deepseek/deepseek-r1:free",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
