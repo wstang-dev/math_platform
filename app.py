@@ -20,7 +20,7 @@ except ImportError:
     HAS_PDF = False
 
 # 頁面基本設定
-st.set_page_config(page_title="小學數學科校本 AI 輔助平台 (OpenRouter 版)", layout="wide", page_icon="📐")
+st.set_page_config(page_title="小學數學科校本 AI 輔助平台 (OpenRouter 免費版)", layout="wide", page_icon="📐")
 
 # 設定 OpenRouter API Key
 st.sidebar.header("🔑 系統設定")
@@ -69,14 +69,18 @@ def clean_ai_response(text):
     return text.strip()
 
 def run_openrouter_ai(prompt, system_prompt, api_key):
-    """透過 OpenRouter 呼叫免費的 Llama 3.3 70B 模型"""
+    """透過 OpenRouter 呼叫免費的旗艦大模型 (預設使用 Qwen 2.5 72B Free)"""
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+    
+    # 可切換的免費模型列表（首選 Qwen 2.5 72B，備選 DeepSeek R1）
+    model_name = "qwen/qwen-2.5-72b-instruct:free"
+    
     payload = {
-        "model": "model": "deepseek/deepseek-r1:free",
+        "model": model_name,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt}
@@ -95,12 +99,12 @@ def run_openrouter_ai(prompt, system_prompt, api_key):
     except Exception as e:
         return False, f"連線失敗：{str(e)}"
 
-st.title("📐 小學數學科校本 AI 輔助與教材平台 (OpenRouter 70B 旗艦版)")
+st.title("📐 小學數學科校本 AI 輔助與教材平台 (OpenRouter 旗艦版)")
 
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成 (OpenRouter Llama 3.3 70B 驅動)
+# Tab 1: 集體備課紀錄生成
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議紀錄生成 (貼上 Gemini 逐字稿 + 備課手冊)")
@@ -190,7 +194,7 @@ with tab1:
             recorder_str = selected_recorder
             formatted_date_str = selected_meeting_date.strftime("%d-%m-%Y")
 
-            with st.spinner("⚡ Llama 3.3 70B 高智商模型正在分析逐字稿並生成深度校本紀錄..."):
+            with st.spinner("⚡ AI 高智商大模型正在分析逐字稿並生成深度校本紀錄..."):
                 clean_transcript = transcript_input[:8000].replace("{", "(").replace("}", ")")
                 clean_guide = guide_text[:6000].replace("{", "(").replace("}", ")") if guide_text else "無提供額外手冊，請純粹根據逐字稿詳細內容展開教學程序。"
 
@@ -238,7 +242,7 @@ with tab1:
                     st.session_state["current_note"] = clean_ai_response(raw_out)
                     st.session_state["current_grade"] = selected_grade
                     st.session_state["current_year"] = selected_school_year
-                    st.toast("✅ Llama 3.3 70B 深度紀錄生成成功！", icon="⚡")
+                    st.toast("✅ 深度紀錄生成成功！", icon="⚡")
                 else:
                     st.error(f"❌ 生成失敗：{raw_out}")
 
