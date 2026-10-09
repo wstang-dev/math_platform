@@ -68,7 +68,7 @@ st.title("📐 小學數學科校本 AI 輔助與教材平台")
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成
+# Tab 1: 集體備課紀錄生成（自動切片防爆版）
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議錄音轉寫與結構化紀錄生成")
@@ -106,94 +106,112 @@ with tab1:
         file_bytes = audio_file.getvalue()
         file_size_mb = len(file_bytes) / (1024 * 1024)
         
-        if file_size_mb > 20:
-            st.error(f"❌ 檔案大小為 {file_size_mb:.1f} MB，超過 Cloudflare API 的 20 MB 限制！請將檔案轉為純音訊 (MP3/M4A) 或剪輯後再上傳。")
-        else:
-            if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
-                if not cf_account_id or not cf_api_token:
-                    st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
-                else:
-                    attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
-                    recorder_str = selected_recorder
+        st.caption(f"📁 目前上傳檔案大小：{file_size_mb:.2f} MB")
 
-                    # --- 1/2 語音轉寫 ---
-                    with st.spinner("1/2 語音轉寫中（連線 Cloudflare Whisper 節點）..."):
-                        whisper_headers = {"Authorization": f"Bearer {cf_api_token}", "Content-Type": "application/octet-stream"}
-                        
-                        models = [
-                            "@cf/openai/whisper-large-v3-turbo", 
-                            "@cf/openai/whisper"
-                        ]
-                        
-                        res = None
-                        for m in models:
-                            res = run_cf_ai(m, whisper_headers, payload=file_bytes, is_binary=True)
-                            if res and res.get("success"):
-                                break
-                            time.sleep(1)
-                        
+        if st.button("🚀 開始分析錄音並生成紀錄", type="primary"):
+            if not cf_account_id or not cf_api_token:
+                st.error("❌ 請先填寫 Cloudflare Account ID 與 API Token！")
+            else:
+                attendees_str = "、".join(selected_attendees) if selected_attendees else "全體數學科老師"
+                recorder_str = selected_recorder
+
+                # --- 1/2 語音轉寫 (大檔案自動分塊傳輸) ---
+                with st.spinner("1/2 語音轉寫中（大檔案正在進行分區段傳輸）..."):
+                    whisper_headers = {"Authorization": f"Bearer {cf_api_token}", "Content-Type": "application/octet-stream"}
+                    model_name = "@cf/openai/whisper-large-v3-turbo"
+                    
+                    # 判斷是否需要進行分塊（每塊最大 2.5 MB 確保 100% 不超出 Cloudflare 限制）
+                    CHUNK_SIZE = 2500000 
+                    transcripts = []
+                    
+                    if len(file_bytes) <= CHUNK_SIZE:
+                        # 小檔案直接傳輸
+                        res = run_cf_ai(model_name, whisper_headers, payload=file_bytes, is_binary=True)
                         if res and res.get("success"):
-                            st.session_state["transcript_text"] = res.get("result", {}).get("text", "")
-                            st.toast("✅ 語音轉寫完成！", icon="🎙️")
-                        else:
-                            err_msg = res.get("errors", [{}])[0].get("message", "Request is too large") if res else "連線失敗"
-                            st.error(f"❌ 語音轉寫失敗：{err_msg}。")
-
-                    # --- 2/2 AI 整理校本表格（加入專業術語修訂規範）---
-                    if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
-                        with st.spinner("2/2 AI 正在分析會議內容，精準校正數學專業術語..."):
-                            today_str = datetime.now().strftime("%d-%m-%Y")
-                            clean_transcript = st.session_state["transcript_text"][:4000].replace("{", "(").replace("}", ")")
+                            transcripts.append(res.get("result", {}).get("text", ""))
+                    else:
+                        # 長音訊分段切片傳輸
+                        total_chunks = (len(file_bytes) // CHUNK_SIZE) + 1
+                        st.info(f"💡 錄音檔較長，系統已自動分割為 {total_chunks} 個片段依序分析...")
+                        
+                        for i in range(total_chunks):
+                            chunk = file_bytes[i*CHUNK_SIZE : (i+1)*CHUNK_SIZE]
+                            if len(chunk) < 1000: # 過小片段跳過
+                                continue
                             
-                            prompt = (
-                                "你是一位香港資深小學數學科科主席與課程專家（CDC）。\n"
-                                "請根據以下會議逐字稿，撰寫一份極具專業深度、條理分明且精準的「集體備課紀錄」。\n\n"
-                                "【極重要專業術語修訂與教學寫作規則】：\n"
-                                "1. **同音字與口語校正**：\n"
-                                "   - 逐字稿中的「體型」必須自動修訂為「**梯形**」。\n"
-                                "   - 逐字稿中的「周界」若指邊長，請根據語境修訂為「**底與高的關係**」或「**邊長**」。\n"
-                                "   - 若討論課題為平行四邊形，請將提及的「直角三角形」根據語境修訂為「**平行四邊形內的高與直角關係**」。\n"
-                                "2. **高質量的教學程序（1. 配合 a. b. c.）**：\n"
-                                "   - 「教學程序 / 解決方法」欄位請寫出具體的課堂操作（例如：使用三角尺及直角尺量度高、GeoGebra 割補分割拼砌、進展工作紙釐清迷思）。\n"
-                                "   - **絕對禁止複製上一行的內容到下一行**！每一行必須獨立針對不同的教學重點。\n"
-                                "3. **格式要求**：只輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），絕對不輸出校名，儲存格內換行統一使用 `<br>`。\n\n"
-                                "【輸出格式模板】：\n"
-                                "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
-                                "**單元：** [根據逐字稿歸納單元，如：平面圖形面積]  \n"
-                                "**課題：** [根據逐字稿歸納課題，如：平行四邊形面積]  \n"
-                                "**日期：** " + today_str + "  \n"
-                                "**出席老師：** " + attendees_str + "  \n"
-                                "**紀錄老師：** " + recorder_str + "  \n\n"
-                                "<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>\n"
-                                "  <tr style='background-color:#f2f2f2;'>\n"
-                                "    <th style='width:30%; padding:8px;'>教學重點 / 難點</th>\n"
-                                "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
-                                "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
-                                "  </tr>\n"
-                                "  <!-- 根據逐字稿，輸出 2 至 3 列完全不重複且修正術語後的 <tr> 區塊 -->\n"
-                                "</table>\n\n"
-                                "會議逐字稿內容：\n" + clean_transcript
-                            )
+                            st.text(f"⏳ 正在分析第 {i+1}/{total_chunks} 片段...")
+                            res = run_cf_ai(model_name, whisper_headers, payload=chunk, is_binary=True)
                             
-                            llm_res = run_cf_ai(
-                                "@cf/meta/llama-3.1-8b-instruct", 
-                                {"Authorization": f"Bearer {cf_api_token}"}, 
-                                payload={
-                                    "messages": [
-                                        {"role": "system", "content": "你是一位專業的香港小學數學課程專家，善於校正語音錯別字，輸出專業且不重複的教學步驟。"},
-                                        {"role": "user", "content": prompt}
-                                    ],
-                                    "max_tokens": 2500,
-                                    "temperature": 0.2
-                                }
-                            )
-                            if llm_res.get("success"):
-                                st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
-                                st.session_state["current_grade"] = selected_grade
-                                st.session_state["current_year"] = selected_school_year
-                                st.toast("✅ 高質量校本紀錄生成成功！", icon="📋")
+                            if res and res.get("success"):
+                                chunk_text = res.get("result", {}).get("text", "")
+                                transcripts.append(chunk_text)
                             else:
-                                st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
+                                st.warning(f"⚠️ 第 {i+1} 片段分析超時，已跳過該段繼續組合...")
+                            time.sleep(1)
+
+                    full_text = " ".join(transcripts).strip()
+
+                    if full_text:
+                        st.session_state["transcript_text"] = full_text
+                        st.toast("✅ 語音轉寫全部完成！", icon="🎙️")
+                    else:
+                        st.error("❌ 語音轉寫失敗：檔案過大或連線超時。請嘗試使用在「歷年備課紀錄庫」上載 Word 檔或剪短音檔。")
+
+                # --- 2/2 AI 整理校本表格（專業術語修訂）---
+                if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
+                    with st.spinner("2/2 AI 正在分析會議內容，精準校正數學專業術語..."):
+                        today_str = datetime.now().strftime("%d-%m-%Y")
+                        clean_transcript = st.session_state["transcript_text"][:4500].replace("{", "(").replace("}", ")")
+                        
+                        prompt = (
+                            "你是一位香港資深小學數學科科主席與課程專家（CDC）。\n"
+                            "請根據以下會議逐字稿，撰寫一份極具專業深度、條理分明且精準的「集體備課紀錄」。\n\n"
+                            "【極重要專業術語修訂與教學寫作規則】：\n"
+                            "1. **同音字與口語校正**：\n"
+                            "   - 逐字稿中的「體型」必須自動修訂為「**梯形**」。\n"
+                            "   - 逐字稿中的「周界」若指邊長，請根據語境修訂為「**底與高的關係**」或「**邊長**」。\n"
+                            "   - 若討論課題為平行四邊形，請將提及的「直角三角形」根據語境修訂為「**平行四邊形內的高與直角關係**」。\n"
+                            "2. **高質量的教學程序（1. 配合 a. b. c.）**：\n"
+                            "   - 「教學程序 / 解決方法」欄位請寫出具體的課堂操作（例如：使用三角尺及直角尺量度高、GeoGebra 割補分割拼砌、進展工作紙釐清迷思）。\n"
+                            "   - **絕對禁止複製上一行的內容到下一行**！每一行必須獨立針對不同的教學重點。\n"
+                            "3. **格式要求**：只輸出 3 個 Column 的 HTML `<table>` 表格（教學重點 / 難點、教學程序 / 解決方法、資料來源），絕對不輸出校名，儲存格內換行統一使用 `<br>`。\n\n"
+                            "【輸出格式模板】：\n"
+                            "### （ " + selected_grade + " ）年級數學科備課紀錄(" + selected_school_year + ")\n\n"
+                            "**單元：** [根據逐字稿歸納單元，如：平面圖形面積]  \n"
+                            "**課題：** [根據逐字稿歸納課題，如：平行四邊形面積]  \n"
+                            "**日期：** " + today_str + "  \n"
+                            "**出席老師：** " + attendees_str + "  \n"
+                            "**紀錄老師：** " + recorder_str + "  \n\n"
+                            "<table border='1' style='width:100%; border-collapse:collapse; text-align:left;'>\n"
+                            "  <tr style='background-color:#f2f2f2;'>\n"
+                            "    <th style='width:30%; padding:8px;'>教學重點 / 難點</th>\n"
+                            "    <th style='width:50%; padding:8px;'>教學程序 / 解決方法</th>\n"
+                            "    <th style='width:20%; padding:8px;'>資料來源</th>\n"
+                            "  </tr>\n"
+                            "  <!-- 根據逐字稿，輸出 2 至 3 列完全不重複且修正術語後的 <tr> 區塊 -->\n"
+                            "</table>\n\n"
+                            "會議逐字稿內容：\n" + clean_transcript
+                        )
+                        
+                        llm_res = run_cf_ai(
+                            "@cf/meta/llama-3.1-8b-instruct", 
+                            {"Authorization": f"Bearer {cf_api_token}"}, 
+                            payload={
+                                "messages": [
+                                    {"role": "system", "content": "你是一位專業的香港小學數學課程專家，善於校正語音錯別字，輸出專業且不重複的教學步驟。"},
+                                    {"role": "user", "content": prompt}
+                                ],
+                                "max_tokens": 2500,
+                                "temperature": 0.2
+                            }
+                        )
+                        if llm_res.get("success"):
+                            st.session_state["current_note"] = llm_res.get("result", {}).get("response", "")
+                            st.session_state["current_grade"] = selected_grade
+                            st.session_state["current_year"] = selected_school_year
+                            st.toast("✅ 高質量校本紀錄生成成功！", icon="📋")
+                        else:
+                            st.error("❌ AI 生成紀錄失敗，請檢查 API 金鑰。")
 
     # 展示區
     if "transcript_text" in st.session_state and st.session_state["transcript_text"]:
