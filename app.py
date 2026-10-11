@@ -20,7 +20,7 @@ except ImportError:
     HAS_PDF = False
 
 # 頁面基本設定
-st.set_page_config(page_title="小學數學科校本 AI 輔助平台 (DeepSeek R1 旗艦版)", layout="wide", page_icon="📐")
+st.set_page_config(page_title="小學數學科校本 AI 輔助平台 (OpenRouter 自動備援版)", layout="wide", page_icon="📐")
 
 # 設定 OpenRouter API Key
 st.sidebar.header("🔑 系統設定")
@@ -74,42 +74,50 @@ def clean_ai_response(text):
     return text.strip()
 
 def run_openrouter_ai(prompt, system_prompt, api_key):
-    """透過 OpenRouter 呼叫免費的 DeepSeek R1 大模型"""
+    """透過 OpenRouter 呼叫免費大模型，並支援自動輪替備援（Fallback）機制"""
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     
-    # 設定為 DeepSeek R1 免費版模型
-    model_name = "deepseek/deepseek-r1:free"
+    # 輪替嘗試的免費模型清單（優先選用廣東話及中文教案表現極佳的 72B/70B 大模型）
+    free_models = [
+        "qwen/qwen-2.5-72b-instruct:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "deepseek/deepseek-r1:free"
+    ]
     
-    payload = {
-        "model": model_name,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.1,
-        "max_tokens": 3000
-    }
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=90)
-        res_json = response.json()
-        if "choices" in res_json and len(res_json["choices"]) > 0:
-            return True, res_json["choices"][0]["message"]["content"]
-        else:
-            err_msg = res_json.get("error", {}).get("message", "未知錯誤")
-            return False, f"OpenRouter 回應失敗：{err_msg}"
-    except Exception as e:
-        return False, f"連線失敗：{str(e)}"
+    last_error = ""
+    for model_name in free_models:
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 3000
+        }
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            res_json = response.json()
+            if "choices" in res_json and len(res_json["choices"]) > 0:
+                return True, res_json["choices"][0]["message"]["content"]
+            else:
+                last_error = res_json.get("error", {}).get("message", "未知錯誤")
+        except Exception as e:
+            last_error = str(e)
+            
+    return False, f"所有免費模型均無回應，最後錯誤：{last_error}"
 
-st.title("📐 小學數學科校本 AI 輔助與教材平台 (DeepSeek R1 旗艦版)")
+st.title("📐 小學數學科校本 AI 輔助與教材平台 (OpenRouter 旗艦版)")
 
 tab1, tab2, tab3 = st.tabs(["🎙️ 集體備課紀錄生成", "📚 歷年備課紀錄庫", "🔗 課堂互動教材庫 (連結版)"])
 
 # ==========================================
-# Tab 1: 集體備課紀錄生成 (DeepSeek R1 驅動)
+# Tab 1: 集體備課紀錄生成
 # ==========================================
 with tab1:
     st.header("🎙️ 集體備課會議紀錄生成 (貼上 Gemini 逐字稿 + 備課手冊)")
@@ -199,7 +207,7 @@ with tab1:
             recorder_str = selected_recorder
             formatted_date_str = selected_meeting_date.strftime("%d-%m-%Y")
 
-            with st.spinner("🧠 DeepSeek R1 正在深度推理逐字稿邏輯並生成校本紀錄..."):
+            with st.spinner("🧠 旗艦 AI 大模型正在分析逐字稿邏輯並生成校本紀錄..."):
                 clean_transcript = transcript_input[:8000].replace("{", "(").replace("}", ")")
                 clean_guide = guide_text[:6000].replace("{", "(").replace("}", ")") if guide_text else "無提供額外手冊，請純粹根據逐字稿詳細內容展開教學程序。"
 
@@ -247,7 +255,7 @@ with tab1:
                     st.session_state["current_note"] = clean_ai_response(raw_out)
                     st.session_state["current_grade"] = selected_grade
                     st.session_state["current_year"] = selected_school_year
-                    st.toast("✅ DeepSeek R1 深度紀錄生成成功！", icon="🧠")
+                    st.toast("✅ 深度紀錄生成成功！", icon="⚡")
                 else:
                     st.error(f"❌ 生成失敗：{raw_out}")
 
@@ -270,7 +278,7 @@ with tab1:
         
         if st.button("🤖 讓 AI 根據指示重新修訂表格", type="secondary"):
             if refine_instruction.strip():
-                with st.spinner("🧠 DeepSeek R1 正在根據您的指示更新表格..."):
+                with st.spinner("⚡ AI 正在根據您的指示更新表格..."):
                     refine_sys_prompt = "你是一位聽從指令的專業教案修改助理，只輸出修正後的完整教案表格。"
                     refine_prompt = f"""
 你是一位香港小學數學教案專家。
