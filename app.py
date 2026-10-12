@@ -20,7 +20,7 @@ except ImportError:
     HAS_PDF = False
 
 # 頁面基本設定
-st.set_page_config(page_title="小學數學科校本 AI 輔助平台 (OpenRouter 自動備援版)", layout="wide", page_icon="📐")
+st.set_page_config(page_title="小學數學科校本 AI 輔助平台 (OpenRouter 旗艦版)", layout="wide", page_icon="📐")
 
 # 設定 OpenRouter API Key
 st.sidebar.header("🔑 系統設定")
@@ -54,12 +54,11 @@ def save_data(file_path, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def clean_ai_response(text):
-    """清理 AI 回傳內容頭尾的 Markdown 代碼塊標記及 DeepSeek R1 思考過程 (<think>...</think>)"""
+    """清理 AI 回傳內容頭尾的 Markdown 代碼塊標記及思考過程"""
     if not text:
         return ""
     text = text.strip()
     
-    # 清理 DeepSeek R1 的推理思考過程區塊
     if "<think>" in text and "</think>" in text:
         text = text.split("</think>")[-1].strip()
         
@@ -81,12 +80,12 @@ def run_openrouter_ai(prompt, system_prompt, api_key):
         "Content-Type": "application/json"
     }
     
-    # 輪替嘗試的免費模型清單（優先選用廣東話及中文教案表現極佳的 72B/70B 大模型）
+    # 輪替嘗試的免費模型清單（已剔除已改為付費的模型）
     free_models = [
         "qwen/qwen-2.5-72b-instruct:free",
         "meta-llama/llama-3.3-70b-instruct:free",
         "google/gemini-2.0-flash-exp:free",
-        "deepseek/deepseek-r1:free"
+        "mistralai/mistral-small-24b-instruct-2501:free"
     ]
     
     last_error = ""
@@ -106,9 +105,10 @@ def run_openrouter_ai(prompt, system_prompt, api_key):
             if "choices" in res_json and len(res_json["choices"]) > 0:
                 return True, res_json["choices"][0]["message"]["content"]
             else:
-                last_error = res_json.get("error", {}).get("message", "未知錯誤")
+                err_msg = res_json.get("error", {}).get("message", "未知錯誤")
+                last_error = f"模型 [{model_name}] 失敗：{err_msg}"
         except Exception as e:
-            last_error = str(e)
+            last_error = f"模型 [{model_name}] 連線失敗：{str(e)}"
             
     return False, f"所有免費模型均無回應，最後錯誤：{last_error}"
 
